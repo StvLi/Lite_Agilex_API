@@ -48,3 +48,7 @@ network:
   ws_timeout_sec: 10
   mapping_timeout_sec: 180
   localization_timeout_sec: 60
+
+agent:
+  # 具身 Agent 通过 get-map 写入的固定缓存（相对项目根目录）
+  map_cache_dir: "data/agent_cache/current_map"

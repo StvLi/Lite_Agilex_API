@@ -13,6 +13,7 @@
 | 5 | 一键目标点导航 | `cmd_navigate.sh` | 终端 D |
 | 6 | 初始位姿 + SLAM 定位优化 | RViz 2D Pose Estimate（松手自动下发）+ 激光叠加 | 终端 C |
 | 7 | RViz 激光地图叠加 | `/agilex/laser_map` @ 0.5Hz | 终端 C |
+| — | **具身 Agent 三件套（JSON）** | `agent_get_map/get_pose/set_target_pose.sh` | 见 [docs/AGENT_HANDOVER.md](docs/AGENT_HANDOVER.md) |
 | — | 一次性环境准备 | `bootstrap_once.sh` | 首次 |
 
 默认调试地图：`hacthon_hall`（可在 `config/default.yaml` 修改）。
@@ -34,7 +35,11 @@ Lite_Agilex_API/
     env.sh                     # 激活项目 Python 环境
     bootstrap_once.sh            # 一次性：凭据检查 + conda + ROS2 编译
     run_ros2.sh                  # ROS2 环境包装（cmd_*.sh 内部使用）
-    cmd_get_pose.sh              # 一键读位姿（像素）
+    agent_get_map.sh           # Function 0：获取地图（JSON）
+    agent_get_pose.sh          # Function 1：获取位姿（JSON）
+    agent_set_target_pose.sh   # Function 2：目标导航（JSON）
+    cmd_get_map.sh               # agent_get_map 别名
+    cmd_get_pose.sh              # 一键读位姿（像素，ROS 原始输出）
     cmd_navigate.sh              # 一键导航
     cmd_save_debug_map.sh        # 一键导出 VLM 地图
     cmd_echo_pose.sh             # 一键 echo /agilex/pose
@@ -401,6 +406,8 @@ python examples/ws_subscribe_status.py
 ## 调试记录
 
 过程记录见 [docs/DEBUG_LOG.md](docs/DEBUG_LOG.md)，开发规划见 [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)。
+
+**具身 Agent 集成**见 [docs/AGENT_HANDOVER.md](docs/AGENT_HANDOVER.md)（function calling、JSON 输出、典型报错）。
 
 ## 常见问题
 
