@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>松灵调试场地地图</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; background: #111; color: #eee; }
+    header { padding: 12px 16px; background: #1b1b1b; display: flex; gap: 16px; align-items: center; }
+    #wrap { position: relative; display: inline-block; margin: 16px; }
+    #map { display: block; cursor: crosshair; max-width: calc(100vw - 32px); }
+    #robot { position: absolute; width: 18px; height: 18px; transform: translate(-50%, -50%); pointer-events: none; }
+    #robot::before { content: ""; position: absolute; left: 50%; top: 50%; width: 0; height: 0;
+      border-left: 10px solid transparent; border-right: 10px solid transparent;
+      border-bottom: 18px solid #4ea1ff; transform: translate(-50%, -70%); }
+    #status { font-size: 14px; color: #9ad; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong id="title">加载中...</strong>
+    <span id="status">等待位姿...</span>
+  </header>
+  <div id="wrap">
+    <img id="map" alt="map" />
+    <div id="robot"></div>
+  </div>
+  <script>
+    let meta = null;
+    const mapEl = document.getElementById("map");
+    const robotEl = document.getElementById("robot");
+    const statusEl = document.getElementById("status");
+    const titleEl = document.getElementById("title");
+
+    function worldToPixel(wx, wy) {
+      const px = (wx - meta.origin_x) / meta.resolution;
+      const py = meta.height - (wy - meta.origin_y) / meta.resolution;
+      const sx = px * mapEl.clientWidth / meta.width;
+      const sy = py * mapEl.clientHeight / meta.height;
+      return { sx, sy, px, py };
+    }
+
+    function pixelToWorld(px, py) {
+      const scaleX = meta.width / mapEl.clientWidth;
+      const scaleY = meta.height / mapEl.clientHeight;
+      const gx = px * scaleX;
+      const gy = py * scaleY;
+      const wx = gx * meta.resolution + meta.origin_x;
+      const wy = (meta.height - gy) * meta.resolution + meta.origin_y;
+      return { wx, wy };
+    }
+
+    function updateRobot(pose) {
+      const { sx, sy } = worldToPixel(pose.x, pose.y);
+      robotEl.style.left = `${sx}px`;
+      robotEl.style.top = `${sy}px`;
+      robotEl.style.transform = `translate(-50%, -50%) rotate(${pose.theta_deg}deg)`;
+      statusEl.textContent = `x=${pose.x.toFixed(2)} y=${pose.y.toFixed(2)} θ=${pose.theta_deg.toFixed(1)}°`;
+    }
+
+    mapEl.addEventListener("click", async (ev) => {
+      if (!meta) return;
+      const rect = mapEl.getBoundingClientRect();
+      const px = ev.clientX - rect.left;
+      const py = ev.clientY - rect.top;
+      const { wx, wy } = pixelToWorld(px, py);
+      if (!confirm(`导航到 (${wx.toFixed(2)}, ${wy.toFixed(2)}) ?`)) return;
+      await fetch("/api/navigate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ x: wx, y: wy, theta_deg: 0 }),
+      });
+    });
+
+    async function boot() {
+      const res = await fetch("/api/map");
+      meta = await res.json();
+      mapEl.src = meta.image_data_url;
+      titleEl.textContent = `调试地图: ${meta.map_name}`;
+      mapEl.onload = () => {
+        const ws = new WebSocket(`ws://${location.host}/ws/pose`);
+        ws.onmessage = (ev) => updateRobot(JSON.parse(ev.data));
+      };
+    }
+    boot();
+  </script>
+</body>
+</html>
