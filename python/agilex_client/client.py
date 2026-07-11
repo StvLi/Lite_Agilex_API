@@ -18,7 +18,7 @@ try:
 except ImportError:  # pragma: no cover
     websockets = None
 
-from .coords import MapInfo, grid_to_world
+from .coords import MapInfo, grid_to_world, world_to_grid
 
 
 @dataclass
@@ -72,10 +72,12 @@ class AgilexClient:
         if params:
             url = f"{url}?{urlencode(params)}"
         resp = self._session.get(url, headers=self._headers(), timeout=self.timeout)
-        resp.raise_for_status()
-        body = resp.json()
-        if not body.get("status", False):
-            raise RuntimeError(body.get("msg") or f"请求失败: {path}")
+        try:
+            body = resp.json()
+        except ValueError:
+            body = {}
+        if resp.status_code >= 400 or not body.get("status", False):
+            raise RuntimeError(body.get("msg") or f"HTTP {resp.status_code}: {path}")
         return body
 
     def list_maps(self) -> list[dict[str, Any]]:
@@ -120,28 +122,45 @@ class AgilexClient:
     def stop_and_save_mapping(self, remark: str = "") -> None:
         self._get("/api/map/create/save/stop", {"remark": remark})
 
+    def _try_stop_navigation(self) -> None:
+        try:
+            self._get("/api/nav/task/stop")
+        except RuntimeError:
+            pass
+
     def navigate_to_point(
         self,
         x: float,
         y: float,
         angle_deg: float,
+        map_info: MapInfo,
         follow_road_net: bool = False,
         sn: str = "",
     ) -> None:
+        # 底盘 HTTP 导航接口使用栅格坐标（像素整数），非世界坐标（米）。
+        self._try_stop_navigation()
+        gx, gy = world_to_grid(x, y, map_info)
+        params: dict[str, Any] = {
+            "x": int(round(gx)),
+            "y": int(round(gy)),
+            "angle": int(round(angle_deg)) % 360,
+            "type": "0",
+            "followRoadNet": str(follow_road_net).lower(),
+        }
+        if sn:
+            params["sn"] = sn
+        self._get("/api/nav/task/point", params)
+
+    def init_pose(self, x: float, y: float, angle_deg: float, map_info: MapInfo) -> None:
+        gx, gy = world_to_grid(x, y, map_info)
         self._get(
-            "/api/nav/task/point",
+            "/api/nav/init/pose",
             {
-                "sn": sn,
-                "x": x,
-                "y": y,
-                "angle": angle_deg,
-                "type": "0",
-                "followRoadNet": str(follow_road_net).lower(),
+                "x": int(round(gx)),
+                "y": int(round(gy)),
+                "angle": int(round(angle_deg)) % 360,
             },
         )
-
-    def init_pose(self, x: float, y: float, angle_deg: float) -> None:
-        self._get("/api/nav/init/pose", {"x": x, "y": y, "angle": angle_deg})
 
     def fetch_pose_once(self, map_info: MapInfo) -> Pose2D:
         if websockets is None:

@@ -20,11 +20,12 @@ from agilex_client import AgilexClient, load_config  # noqa: E402
 app = FastAPI(title="Agilex Map Viewer")
 _client: AgilexClient | None = None
 _map_name: str = ""
+_map_info = None
 _frame_id: str = "agilex_map"
 
 
 def _get_client() -> AgilexClient:
-    global _client, _map_name, _frame_id
+    global _client, _map_name, _map_info, _frame_id
     if _client is None:
         cfg = load_config()
         chassis = cfg["chassis"]
@@ -39,6 +40,8 @@ def _get_client() -> AgilexClient:
             password=auth["password"],
         )
         _client.login()
+        _client.switch_map(_map_name)
+        _map_info = _client.get_map_info(_map_name)
     return _client
 
 
@@ -78,6 +81,7 @@ async def navigate(payload: dict):
         float(payload["x"]),
         float(payload["y"]),
         float(payload.get("theta_deg", 0.0)),
+        _map_info,
         follow_road_net=bool(payload.get("follow_road_net", False)),
     )
     return {"success": True}

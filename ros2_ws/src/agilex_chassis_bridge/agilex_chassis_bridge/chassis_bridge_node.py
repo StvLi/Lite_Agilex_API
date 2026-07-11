@@ -69,6 +69,10 @@ class ChassisBridgeNode(Node):
                 "API 凭据未配置。请复制 config/local.yaml.example 为 config/local.yaml 并填入用户名密码。"
             )
         self.client.login()
+        try:
+            self.client.switch_map(self.map_name)
+        except RuntimeError as exc:
+            self.get_logger().warning(f"启动时切换地图跳过: {exc}")
         self.map_info = self.client.get_map_info(self.map_name)
         self.get_logger().info(f"已连接底盘，当前地图: {self.map_name}")
 
@@ -196,6 +200,7 @@ class ChassisBridgeNode(Node):
                 request.x,
                 request.y,
                 request.theta_deg,
+                self.map_info,
                 follow_road_net=request.follow_road_net,
             )
             response.success = True
