@@ -9,14 +9,13 @@ import sys
 from pathlib import Path
 
 import uvicorn
-import yaml
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python"))
 
-from agilex_client import AgilexClient  # noqa: E402
+from agilex_client import AgilexClient, load_config  # noqa: E402
 
 app = FastAPI(title="Agilex Map Viewer")
 _client: AgilexClient | None = None
@@ -24,19 +23,10 @@ _map_name: str = ""
 _frame_id: str = "agilex_map"
 
 
-def _load_config() -> dict:
-    path = ROOT / "config" / "default.yaml"
-    local = ROOT / "config" / "local.yaml"
-    if local.exists():
-        path = local
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
 def _get_client() -> AgilexClient:
     global _client, _map_name, _frame_id
     if _client is None:
-        cfg = _load_config()
+        cfg = load_config()
         chassis = cfg["chassis"]
         auth = cfg["auth"]
         debug = cfg["debug_site"]
@@ -131,7 +121,7 @@ async def pose_stream(websocket: WebSocket):
 
 
 def main() -> None:
-    cfg = _load_config()
+    cfg = load_config()
     host = cfg["web"]["host"]
     port = int(cfg["web"]["port"])
     uvicorn.run("web.map_viewer.server:app", host=host, port=port, reload=False)
