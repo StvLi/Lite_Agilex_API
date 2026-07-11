@@ -11,7 +11,7 @@ from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, TransformS
 from nav_msgs.msg import OccupancyGrid
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, PointCloud2
 from tf2_ros import TransformBroadcaster
 
 from agilex_msgs.srv import (
@@ -47,6 +47,7 @@ from agilex_client import (  # noqa: E402
     find_project_root,
     load_config,
 )
+from agilex_chassis_bridge.laser_conversion import pixel_points_to_pointcloud2  # noqa: E402
 from agilex_chassis_bridge.map_conversion import (  # noqa: E402
     pixel_pose_to_rviz,
     png_bytes_to_occupancy_grid,
@@ -98,6 +99,16 @@ class ChassisBridgeNode(Node):
         self._pose_thread = threading.Thread(target=self._pose_worker, daemon=True)
         self._pose_thread.start()
 
+        vis_cfg = self.cfg.get("visualization", {})
+        self._laser_enabled = bool(vis_cfg.get("laser_enabled", True))
+        self._laser_accumulate = bool(vis_cfg.get("laser_accumulate", False))
+        self._laser_accumulate_max = int(vis_cfg.get("laser_accumulate_max_scans", 6))
+        self._laser_buffers: dict[str, list[tuple[float, float]]] = {}
+        self._laser_history: list[list[tuple[float, float]]] = []
+        self._laser_lock = threading.Lock()
+        self._stop_laser = threading.Event()
+        self._laser_threads: list[threading.Thread] = []
+
         qos = QoSProfile(
             depth=1,
             reliability=ReliabilityPolicy.RELIABLE,
@@ -117,8 +128,14 @@ class ChassisBridgeNode(Node):
         )
         self.map_pub = self.create_publisher(OccupancyGrid, ros_cfg["map_topic"], qos)
         self.map_image_pub = self.create_publisher(Image, ros_cfg["map_image_topic"], qos)
+        self.laser_pub = self.create_publisher(
+            PointCloud2,
+            ros_cfg.get("laser_map_topic", "/agilex/laser_map"),
+            10,
+        )
         self.tf_broadcaster = TransformBroadcaster(self)
         self._publish_map_once()
+        self._start_laser_workers()
 
         self.create_service(
             SaveDebugMap,
@@ -162,6 +179,10 @@ class ChassisBridgeNode(Node):
             10,
         )
         self.create_timer(1.0, self._publish_latest_pose)
+        self.create_timer(1.0, self._publish_pending_init_pose_preview)
+        laser_hz = float(vis_cfg.get("laser_publish_hz", 0.5))
+        if self._laser_enabled and laser_hz > 0.0:
+            self.create_timer(1.0 / laser_hz, self._publish_laser_map)
 
     def _make_map_msgs(self):
         png = self.client.get_map_png_bytes(self.map_name)
@@ -188,6 +209,60 @@ class ChassisBridgeNode(Node):
 
         self.client.stream_pose(on_pose, self._stop_pose)
 
+    def _start_laser_workers(self) -> None:
+        if not self._laser_enabled:
+            self.get_logger().info("激光地图叠加已关闭（visualization.laser_enabled=false）")
+            return
+        sources = self.cfg.get("visualization", {}).get(
+            "laser_sources",
+            ["/real_time_laser/front", "/real_time_laser/back"],
+        )
+        for ws_path in sources:
+            thread = threading.Thread(
+                target=self._laser_worker,
+                args=(str(ws_path),),
+                daemon=True,
+            )
+            thread.start()
+            self._laser_threads.append(thread)
+        self.get_logger().info(
+            f"激光 WS 订阅已启动: {sources}，发布 {self.laser_pub.topic_name} "
+            f"@ {self.cfg.get('visualization', {}).get('laser_publish_hz', 0.5)} Hz"
+        )
+
+    def _laser_worker(self, ws_path: str) -> None:
+        def on_points(points: list[tuple[float, float]]) -> None:
+            with self._laser_lock:
+                self._laser_buffers[ws_path] = points
+
+        self.client.stream_laser_points(ws_path, on_points, self._stop_laser)
+
+    def _publish_laser_map(self) -> None:
+        with self._laser_lock:
+            if not self._laser_buffers:
+                return
+            merged: list[tuple[float, float]] = []
+            for points in self._laser_buffers.values():
+                merged.extend(points)
+            if not merged:
+                return
+            if self._laser_accumulate:
+                self._laser_history.append(list(merged))
+                if len(self._laser_history) > self._laser_accumulate_max:
+                    self._laser_history = self._laser_history[-self._laser_accumulate_max :]
+                merged = [pt for scan in self._laser_history for pt in scan]
+
+        try:
+            msg = pixel_points_to_pointcloud2(
+                merged,
+                self.map_info.height,
+                self.frame_id,
+                self.get_clock().now().to_msg(),
+            )
+            self.laser_pub.publish(msg)
+        except Exception as exc:
+            self.get_logger().warning(f"发布激光点云失败: {exc}")
+
     def _pixel_pose_to_rviz(self, pose) -> tuple[float, float, float]:
         """图像像素位姿 → RViz/TF 用的 ROS 地图坐标（y 向上）。"""
         x, y = pixel_pose_to_rviz(float(pose.x), float(pose.y), self.map_info.height)
@@ -200,11 +275,49 @@ class ChassisBridgeNode(Node):
         with self._init_pose_lock:
             self._pending_init_pose = pose
         self._publish_init_pose_preview(pose)
-        self.get_logger().info(
-            "已记录初始位姿（像素）: "
-            f"x={pose.x:.1f}, y={pose.y:.1f}, theta={pose.theta_deg:.1f}°；"
-            f"调用 {self.service_prefix}/start_localization 启动定位优化"
+
+    def _apply_init_pose_to_chassis(
+        self,
+        pose: Pose2D,
+        *,
+        wait_for_ready: bool = False,
+        timeout_sec: float | None = None,
+    ) -> tuple[bool, bool, int, str]:
+        """调用底盘 GET /api/nav/init/pose 启动 SLAM 定位优化。"""
+        try:
+            self.client.switch_map(self.map_name)
+        except RuntimeError as exc:
+            self.get_logger().warning(f"切换地图跳过: {exc}")
+
+        self.client.init_pose(pose.x, pose.y, pose.theta_deg)
+        message = (
+            f"已下发初始位姿到 SLAM: "
+            f"x={pose.x:.1f}, y={pose.y:.1f}, theta={pose.theta_deg:.1f}°"
         )
+        localized = False
+        nav_detail_status = 0
+        if wait_for_ready:
+            timeout = timeout_sec
+            if timeout is None or timeout <= 0.0:
+                timeout = float(self.cfg["network"]["localization_timeout_sec"])
+            status = self.client.wait_for_localization(timeout_sec=timeout)
+            localized = status.robot_nav_detail_status == NAV_DETAIL_LOCALIZED
+            nav_detail_status = status.robot_nav_detail_status
+            message = (
+                f"定位完成: status={nav_detail_status} "
+                f"{status.robot_nav_detail_status_text}"
+            )
+        return True, localized, nav_detail_status, message
+
+    def _dispatch_init_pose_async(self, pose: Pose2D, source: str) -> None:
+        def _worker() -> None:
+            try:
+                _, _, _, message = self._apply_init_pose_to_chassis(pose)
+                self.get_logger().info(f"{source}: {message}")
+            except Exception as exc:
+                self.get_logger().error(f"{source} 下发 SLAM 初值失败: {exc}")
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _get_pending_init_pose(self) -> Pose2D | None:
         with self._init_pose_lock:
@@ -221,10 +334,10 @@ class ChassisBridgeNode(Node):
         self.init_pose_preview_pub.publish(msg)
 
     def _on_initial_pose(self, msg: PoseWithCovarianceStamped) -> None:
-        if msg.header.frame_id and msg.header.frame_id != self.frame_id:
+        frame = msg.header.frame_id
+        if frame and frame != self.frame_id:
             self.get_logger().warning(
-                f"忽略 /initialpose：frame_id={msg.header.frame_id}，"
-                f"期望 {self.frame_id}"
+                f"忽略 /initialpose：frame_id={frame}，期望 {self.frame_id}"
             )
             return
         px, py = self._rviz_pose_to_pixel(
@@ -232,7 +345,13 @@ class ChassisBridgeNode(Node):
             msg.pose.pose.position.y,
         )
         theta = quaternion_to_theta_deg(msg.pose.pose.orientation)
-        self._store_pending_init_pose(Pose2D(x=px, y=py, theta_deg=theta))
+        pose = Pose2D(x=px, y=py, theta_deg=theta)
+        self._store_pending_init_pose(pose)
+        self.get_logger().info(
+            "RViz 初值已记录（像素）: "
+            f"x={pose.x:.1f}, y={pose.y:.1f}, theta={pose.theta_deg:.1f}°"
+        )
+        self._dispatch_init_pose_async(pose, "RViz /initialpose")
 
     def _resolve_init_pose(
         self,
@@ -277,39 +396,29 @@ class ChassisBridgeNode(Node):
                 float(request.y),
                 float(request.theta_deg),
             )
-            try:
-                self.client.switch_map(self.map_name)
-            except RuntimeError as exc:
-                self.get_logger().warning(f"启动定位前切换地图跳过: {exc}")
-
-            self.client.init_pose(pose.x, pose.y, pose.theta_deg)
-            response.success = True
-            response.localized = False
-            response.nav_detail_status = 0
-            response.message = (
-                f"已下发初始位姿并启动定位优化: "
-                f"x={pose.x:.1f}, y={pose.y:.1f}, theta={pose.theta_deg:.1f}°"
+            timeout = float(request.timeout_sec)
+            if timeout <= 0.0:
+                timeout = float(self.cfg["network"]["localization_timeout_sec"])
+            success, localized, nav_detail_status, message = self._apply_init_pose_to_chassis(
+                pose,
+                wait_for_ready=request.wait_for_ready,
+                timeout_sec=timeout if request.wait_for_ready else None,
             )
-
-            if request.wait_for_ready:
-                timeout = float(request.timeout_sec)
-                if timeout <= 0.0:
-                    timeout = float(self.cfg["network"]["localization_timeout_sec"])
-                status = self.client.wait_for_localization(timeout_sec=timeout)
-                response.localized = (
-                    status.robot_nav_detail_status == NAV_DETAIL_LOCALIZED
-                )
-                response.nav_detail_status = status.robot_nav_detail_status
-                response.message = (
-                    f"定位完成: status={status.robot_nav_detail_status} "
-                    f"{status.robot_nav_detail_status_text}"
-                )
+            response.success = success
+            response.localized = localized
+            response.nav_detail_status = nav_detail_status
+            response.message = message
         except Exception as exc:
             response.success = False
             response.localized = False
             response.nav_detail_status = 0
             response.message = str(exc)
         return response
+
+    def _publish_pending_init_pose_preview(self) -> None:
+        pose = self._get_pending_init_pose()
+        if pose is not None:
+            self._publish_init_pose_preview(pose)
 
     def _publish_robot_tf(self, pose) -> None:
         x, y, theta = self._pixel_pose_to_rviz(pose)
@@ -429,6 +538,7 @@ class ChassisBridgeNode(Node):
 
     def destroy_node(self) -> bool:
         self._stop_pose.set()
+        self._stop_laser.set()
         return super().destroy_node()
 
 

@@ -46,7 +46,8 @@ Lite_Agilex_API/
     build_ros_ws.sh
     run_bridge.sh              # ROS2 桥接节点
     run_map_viewer.sh          # Web 地图
-    run_rviz.sh                # RViz2
+    run_rviz.sh                # RViz2（自动生成全图俯视配置）
+    gen_rviz_config.py         # 按地图尺寸生成 chassis_map.rviz
   examples/
     http_get_maps.py
     ws_subscribe_status.py
@@ -103,6 +104,7 @@ conda activate lite_agilex_api
 | `/agilex/init_pose_preview` | `geometry_msgs/PoseStamped` | 事件触发 | 已记录、尚未下发的初始位姿预览（绿色箭头） |
 | `/agilex/map` | `nav_msgs/OccupancyGrid` | 启动时 + 保存后 | 当前调试地图（分辨率 1 像素），供 RViz |
 | `/agilex/map_image` | `sensor_msgs/Image` | 启动时 + 保存后 | 地图灰度图 |
+| `/agilex/laser_map` | `sensor_msgs/PointCloud2` | 0.5 Hz（可配） | 前后激光叠加在地图坐标系（已做像素→RViz 缩放转换） |
 
 ### 服务
 
@@ -120,24 +122,21 @@ conda activate lite_agilex_api
 
 | 话题 | 类型 | 说明 |
 | --- | --- | --- |
-| `/initialpose` | `geometry_msgs/PoseWithCovarianceStamped` | RViz **2D Pose Estimate** 工具输入，桥接转为像素初值并缓存 |
+| `/initialpose` | `geometry_msgs/PoseWithCovarianceStamped` | RViz **2D Pose Estimate** 松手后自动下发 SLAM 初值 |
 
 ## SLAM 定位优化流程
 
-底盘在已有地图上定位时，需要合理的初始位姿作为优化起点。推荐三步：
+底盘在已有地图上定位时，需要合理的初始位姿作为优化起点：
 
-1. **设置初始位姿**（可随时重复）
-   - **RViz**：工具栏选 **2D Pose Estimate**，在地图上拖拽设位置和朝向 → 绿色预览箭头（`/agilex/init_pose_preview`）
-   - **ROS 服务**：`./scripts/cmd_set_init_pose.sh 665 350 90`
-   - **Web API**：`POST /api/init_pose`（像素坐标，见下文）
-2. **拉起定位优化**
-   - `./scripts/cmd_start_localization.sh`（使用上一步缓存的初值，默认等待定位完成）
-   - 或直接指定：`./scripts/cmd_start_localization.sh 665 350 90`
-   - 不等待立即返回：`./scripts/cmd_start_localization.sh --no-wait`
+1. **RViz 拖拽设初值（推荐）**
+   - **2D Pose Estimate**：按下定位置 → 拖动设朝向 → **松开**确认
+   - 桥接收到 `/initialpose` 后**自动调用**底盘 `GET /api/nav/init/pose` 启动定位优化
+   - 终端 A 日志应出现：`RViz /initialpose: 已下发初始位姿到 SLAM: ...`
+2. **脚本/服务（可选）**
+   - `./scripts/cmd_set_init_pose.sh 665 350 90` 仅记录（不下发）
+   - `./scripts/cmd_start_localization.sh` 显式下发并可选等待定位完成（`nav_detail_status=114`）
 3. **后续接口照常使用**
    - `cmd_get_pose.sh`、`cmd_navigate.sh`、Web 点击导航等
-
-底盘 HTTP 对应 `GET /api/nav/init/pose`；定位进度可通过 WS `/real_time_work_status` 观察（状态码 `114` = 定位成功）。
 
 ### TODO（后续）
 
@@ -201,9 +200,15 @@ cd /home/stvli/Desktop/where_is_my_key/src/Lite_Agilex_API
 ./scripts/run_rviz.sh
 ```
 
-Fixed Frame = `agilex_map`；地图来自 `/agilex/map`，机器人显示为橙色 **Pose 箭头**（`/agilex/pose_rviz`）+ `base_link` 坐标轴。默认俯视中心在地图正中（`hacthon_hall` 约 1210×1240 px）。
+Fixed Frame = `agilex_map`；`run_rviz.sh` 会按地图尺寸自动生成**全图俯视**配置。机器人显示为橙色 Pose 箭头 + `base_link` 坐标轴。
 
-**设初始位姿**：工具栏 **2D Pose Estimate** → 地图上拖拽；绿色箭头为待下发初值。然后在终端 D 执行 `./scripts/cmd_start_localization.sh` 拉起定位优化（见上文「SLAM 定位优化流程」）。
+**设初始位姿（2D Pose Estimate）**：
+1. **按下**定位置 → **拖动**设朝向 → **松开**确认；松手后自动下发 SLAM 初值
+2. **滚轮**缩放地图（TopDownOrtho 内置；也可用 Move Camera 工具）
+3. 设初值时请保持 **2D Pose Estimate** 工具选中，勿用 Move Camera 左键拖拽
+4. 红色点云为激光叠加（默认 0.5Hz，前后雷达合并）
+
+激光配置见 `config/default.yaml` → `visualization`（`laser_accumulate: true` 可开启多帧叠加）。
 
 ---
 
@@ -354,6 +359,9 @@ python examples/ws_subscribe_status.py
 | --- | --- | --- |
 | `chassis.host` | `10.7.5.99` | 松灵 Jetson API 地址 |
 | `debug_site.map_name` | `hacthon_hall` | 调试场地地图 |
+| `debug_site.map_width` | `1210` | 地图宽（像素），供 RViz 全图俯视生成 |
+| `debug_site.map_height` | `1240` | 地图高（像素） |
+| `debug_site.rviz_zoom_factor` | `1.25` | RViz 地图放大系数（>1 更大，仍尽量看全图） |
 | `debug_site.output_dir` | `data/maps/hacthon_hall` | VLM 导出目录 |
 | `ros2.domain_id` | `15` | ROS 域 ID |
 | `web.port` | `8765` | Web 地图端口 |

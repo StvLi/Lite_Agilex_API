@@ -13,6 +13,9 @@ auth:
 
 debug_site:
   map_name: "hacthon_hall"
+  map_width: 1210
+  map_height: 1240
+  rviz_zoom_factor: 1.25   # >1 放大地图显示（默认在能看全图基础上放大 25%）
   output_dir: "data/maps/hacthon_hall"
   frame_id: "agilex_map"
 
@@ -24,7 +27,17 @@ ros2:
   initial_pose_topic: "/initialpose"
   map_topic: "/agilex/map"
   map_image_topic: "/agilex/map_image"
+  laser_map_topic: "/agilex/laser_map"
   service_prefix: "/agilex"
+
+visualization:
+  laser_enabled: true
+  laser_sources:
+    - "/real_time_laser/front"
+    - "/real_time_laser/back"
+  laser_publish_hz: 0.5          # RViz 发布频率，底盘 WS 原生约 1Hz
+  laser_accumulate: false        # true=叠加最近若干帧；false=仅当前帧（推荐定位预览）
+  laser_accumulate_max_scans: 6  # accumulate=true 时保留帧数（约 12s @0.5Hz）
 
 web:
   host: "0.0.0.0"

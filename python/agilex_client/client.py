@@ -290,3 +290,42 @@ class AgilexClient:
                 if stop_event.is_set():
                     break
                 time.sleep(1.0)
+
+    def stream_laser_points(
+        self,
+        ws_path: str,
+        on_points: Callable[[list[tuple[float, float]]], None],
+        stop_event: threading.Event,
+    ) -> None:
+        """订阅底盘激光 WS，点坐标为地图图像像素 [x, y]。"""
+        if websockets is None:
+            raise RuntimeError("需要安装 websockets 包")
+
+        async def _loop() -> None:
+            path = ws_path if ws_path.startswith("/") else f"/{ws_path}"
+            url = f"{self.ws_base}{path}"
+            async with websockets.connect(url, open_timeout=self.timeout) as ws:
+                while not stop_event.is_set():
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=2.0)
+                    except asyncio.TimeoutError:
+                        continue
+                    msg = json.loads(raw)
+                    data = msg.get("data")
+                    if not isinstance(data, list):
+                        continue
+                    points: list[tuple[float, float]] = []
+                    for item in data:
+                        if not isinstance(item, (list, tuple)) or len(item) < 2:
+                            continue
+                        points.append((float(item[0]), float(item[1])))
+                    if points:
+                        on_points(points)
+
+        while not stop_event.is_set():
+            try:
+                asyncio.run(_loop())
+            except Exception:
+                if stop_event.is_set():
+                    break
+                time.sleep(1.0)
