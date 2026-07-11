@@ -179,6 +179,15 @@ ros2 service call /agilex/navigate_to_pose agilex_msgs/srv/NavigateToPose \
 
 确认后立即进入 Phase 0–1 实现。
 
+### Git 提交记录（2026-07-11）
+
+```text
+58aa63c feat: add interactive web map viewer with click-to-navigate
+ffec9b3 feat: add ROS2 chassis bridge for map, pose, and navigation
+83bfa0c feat: add agilex_client RANGER HTTP/WS library
+576bde4 feat: scaffold Lite Agilex API repo with RANGER docs and dev plan
+```
+
 ## 风险与注意事项
 
 - WS 端口为 **6060**（非文档旧版 9090）；位姿为栅格坐标，必须转换。
