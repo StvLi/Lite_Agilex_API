@@ -164,7 +164,6 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /initialpose
-    - Class: rviz_default_plugins/MoveCamera
   Value: true
   Views:
     Current:

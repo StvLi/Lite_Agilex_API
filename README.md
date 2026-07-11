@@ -11,7 +11,8 @@
 | 3 | ROS2 存储/更新 VLM 平面图 | `cmd_save_debug_map.sh` | 终端 D |
 | 4 | 一键获取当前位姿 | `cmd_get_pose.sh` + `/agilex/pose` | 终端 D |
 | 5 | 一键目标点导航 | `cmd_navigate.sh` | 终端 D |
-| 6 | 初始位姿 + SLAM 定位优化 | RViz 2D Pose Estimate + `cmd_start_localization.sh` | 终端 C/D |
+| 6 | 初始位姿 + SLAM 定位优化 | RViz 2D Pose Estimate（松手自动下发）+ 激光叠加 | 终端 C |
+| 7 | RViz 激光地图叠加 | `/agilex/laser_map` @ 0.5Hz | 终端 C |
 | — | 一次性环境准备 | `bootstrap_once.sh` | 首次 |
 
 默认调试地图：`hacthon_hall`（可在 `config/default.yaml` 修改）。
@@ -101,10 +102,10 @@ conda activate lite_agilex_api
 | --- | --- | --- | --- |
 | `/agilex/pose` | `geometry_msgs/PoseStamped` | 1 Hz | 机器人位姿（**图像像素**，供 API/VLM） |
 | `/agilex/pose_rviz` | `geometry_msgs/PoseStamped` | 1 Hz | RViz 专用位姿（ROS 地图坐标，含朝向箭头） |
-| `/agilex/init_pose_preview` | `geometry_msgs/PoseStamped` | 事件触发 | 已记录、尚未下发的初始位姿预览（绿色箭头） |
+| `/agilex/init_pose_preview` | `geometry_msgs/PoseStamped` | 1 Hz | 待下发/已设初值预览（绿色箭头） |
 | `/agilex/map` | `nav_msgs/OccupancyGrid` | 启动时 + 保存后 | 当前调试地图（分辨率 1 像素），供 RViz |
 | `/agilex/map_image` | `sensor_msgs/Image` | 启动时 + 保存后 | 地图灰度图 |
-| `/agilex/laser_map` | `sensor_msgs/PointCloud2` | 0.5 Hz（可配） | 前后激光叠加在地图坐标系（已做像素→RViz 缩放转换） |
+| `/agilex/laser_map` | `sensor_msgs/PointCloud2` | 0.5 Hz（可配） | 前后激光点云（像素→RViz 坐标转换后叠加在地图上） |
 
 ### 服务
 
@@ -141,7 +142,7 @@ conda activate lite_agilex_api
 ### TODO（后续）
 
 - [ ] VLM 自动估计初值后调用 `/agilex/set_initial_pose` + `/agilex/start_localization`
-- [ ] RViz 自定义 Panel「一键启动定位」按钮（当前用终端 D 脚本触发）
+- [ ] RViz 滚轮缩放（TopDownOrtho 暂不支持稳定交互，当前固定全图俯视）
 - [ ] Web UI 地图页增加「设初值 / 启动定位」交互控件
 
 ## 快速上手（无脑复制粘贴）
@@ -200,15 +201,22 @@ cd /home/stvli/Desktop/where_is_my_key/src/Lite_Agilex_API
 ./scripts/run_rviz.sh
 ```
 
-Fixed Frame = `agilex_map`；`run_rviz.sh` 会按地图尺寸自动生成**全图俯视**配置。机器人显示为橙色 Pose 箭头 + `base_link` 坐标轴。
+Fixed Frame = `agilex_map`。`run_rviz.sh` 启动时会按 `config/default.yaml` 中地图尺寸**自动生成全图俯视**配置（`scripts/gen_rviz_config.py`）。
 
-**设初始位姿（2D Pose Estimate）**：
-1. **按下**定位置 → **拖动**设朝向 → **松开**确认；松手后自动下发 SLAM 初值
-2. **滚轮**缩放地图（TopDownOrtho 内置；也可用 Move Camera 工具）
-3. 设初值时请保持 **2D Pose Estimate** 工具选中，勿用 Move Camera 左键拖拽
-4. 红色点云为激光叠加（默认 0.5Hz，前后雷达合并）
+**显示内容**
 
-激光配置见 `config/default.yaml` → `visualization`（`laser_accumulate: true` 可开启多帧叠加）。
+| 元素 | 话题/来源 | 颜色 |
+| --- | --- | --- |
+| 地图 | `/agilex/map` | 灰度栅格 |
+| 机器人位姿 | `/agilex/pose_rviz` + TF | 橙色箭头 |
+| 初值预览 | `/agilex/init_pose_preview` | 绿色箭头 |
+| 激光点云 | `/agilex/laser_map` | 红色点 |
+
+**设初值（2D Pose Estimate）**：左键按下定位置 → 拖动设朝向 → **松开**。松手后桥接自动调用底盘 `GET /api/nav/init/pose`；终端 A 应打印 `RViz /initialpose: 已下发初始位姿到 SLAM: ...`。
+
+**视角**：当前为固定全图俯视（`TopDownOrtho`），不提供滚轮缩放；需调整显示大小时改 `debug_site.rviz_zoom_factor`（默认 `1.25`）后重启 RViz。
+
+激光相关配置见 `visualization.*`（`laser_publish_hz`、`laser_accumulate` 等）。
 
 ---
 
@@ -228,12 +236,14 @@ cd /home/stvli/Desktop/where_is_my_key/src/Lite_Agilex_API
 ./scripts/cmd_set_init_pose.sh 665 350 90
 ```
 
-拉起 SLAM 定位优化（使用 RViz / 上一条命令记录的初值）：
+拉起 SLAM 定位优化（可选：显式下发并等待 `nav_detail_status=114`）：
 
 ```bash
 cd /home/stvli/Desktop/where_is_my_key/src/Lite_Agilex_API
 ./scripts/cmd_start_localization.sh
 ```
+
+> RViz 拖拽设初值后**已自动下发** SLAM API；此命令用于重新下发或等待定位完成。
 
 或直接指定初值并等待定位完成：
 
@@ -361,8 +371,11 @@ python examples/ws_subscribe_status.py
 | `debug_site.map_name` | `hacthon_hall` | 调试场地地图 |
 | `debug_site.map_width` | `1210` | 地图宽（像素），供 RViz 全图俯视生成 |
 | `debug_site.map_height` | `1240` | 地图高（像素） |
-| `debug_site.rviz_zoom_factor` | `1.25` | RViz 地图放大系数（>1 更大，仍尽量看全图） |
+| `debug_site.rviz_zoom_factor` | `1.25` | RViz 生成配置时的放大系数（非滚轮；改后重启 RViz） |
 | `debug_site.output_dir` | `data/maps/hacthon_hall` | VLM 导出目录 |
+| `visualization.laser_enabled` | `true` | 是否订阅激光 WS 并发布 `/agilex/laser_map` |
+| `visualization.laser_publish_hz` | `0.5` | 激光点云 RViz 发布频率 |
+| `visualization.laser_accumulate` | `false` | `true` 时叠加最近若干帧激光 |
 | `ros2.domain_id` | `15` | ROS 域 ID |
 | `web.port` | `8765` | Web 地图端口 |
 
@@ -402,4 +415,5 @@ python examples/ws_subscribe_status.py
 | Web 地图无位姿 | 确认底盘 WS `:6060/real_time_pose` 可达 |
 | `The passed service type is invalid` | 用 `cmd_*.sh`，不要裸跑 `ros2 service` |
 | `navigate_to_pose` 失败 | 确认 `x/y` 为图像像素；桥接需在运行 |
-| conda 安装慢 | 脚本已内置 USTC/Aliyun 回退；环境存在时仅 pip |
+| RViz 无激光点云 | 确认 A 在跑且日志有「激光 WS 订阅已启动」；定位/导航开启后 WS 才有数据 |
+| RViz 视角偏移 | 勿用中键/右键拖拽；重启 `./scripts/run_rviz.sh` 恢复全图俯视 |

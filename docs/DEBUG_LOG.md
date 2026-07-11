@@ -304,30 +304,28 @@ ros2 service call /agilex/navigate_to_pose agilex_msgs/srv/NavigateToPose \
 
 ### 实现
 
-1. RViz **2D Pose Estimate** → `/initialpose` → 桥接缓存像素初值 → 绿色 `/agilex/init_pose_preview`
-2. `/agilex/set_initial_pose` 服务 + `cmd_set_init_pose.sh`
-3. `/agilex/start_localization` 服务 + `cmd_start_localization.sh`
-   - 调用底盘 `GET /api/nav/init/pose`
-   - 可选等待 WS `/real_time_work_status` 至 `robotNavDetailStatus=114`（定位成功）
-4. Web API：`POST /api/init_pose`、`POST /api/start_localization`
+1. RViz **2D Pose Estimate** → `/initialpose` → 自动调用 `GET /api/nav/init/pose`（松手即发）
+2. `scripts/gen_rviz_config.py` 按地图尺寸生成全图俯视 RViz 配置
+3. `/agilex/laser_map`：前后激光 WS → PointCloud2 @ 0.5Hz，坐标像素→RViz 转换
+4. 服务/脚本：`set_initial_pose`、`start_localization`（显式下发 + 可选等待 114）
+
+### 已知限制
+
+- RViz **滚轮缩放**暂未实现（TopDownOrtho 交互不稳定，固定全图俯视；可调 `rviz_zoom_factor`）
 
 ### 验证命令
 
 ```bash
-# 终端 A
-./scripts/run_bridge.sh
-
-# 终端 D
-./scripts/cmd_set_init_pose.sh 665 350 90
-./scripts/cmd_start_localization.sh --no-wait
-./scripts/cmd_get_pose.sh
+./scripts/run_bridge.sh          # 终端 A
+./scripts/run_rviz.sh            # 终端 C
+./scripts/cmd_start_localization.sh --no-wait   # 可选
 ```
 
 ### TODO
 
-- VLM 自动设初值（调用 set_initial_pose + start_localization）
-- RViz Panel 一键启动定位按钮
-- Web 地图页交互控件
+- VLM 自动设初值
+- RViz 滚轮缩放
+- Web 地图设初值控件
 
 ---
 
