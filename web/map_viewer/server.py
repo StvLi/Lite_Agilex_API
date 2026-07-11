@@ -124,7 +124,7 @@ def main() -> None:
     cfg = load_config()
     host = cfg["web"]["host"]
     port = int(cfg["web"]["port"])
-    uvicorn.run("web.map_viewer.server:app", host=host, port=port, reload=False)
+    uvicorn.run(app, host=host, port=port, reload=False)
 
 
 if __name__ == "__main__":

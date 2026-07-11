@@ -6,4 +6,4 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/env.sh"
 cd "${ROOT_DIR}"
-exec python -m web.map_viewer.server
+exec python "${ROOT_DIR}/web/map_viewer/server.py"
