@@ -143,7 +143,7 @@ class ChassisBridgeNode(Node):
             with self._pose_lock:
                 self._latest_pose = pose
 
-        self.client.stream_pose(self.map_info, on_pose, self._stop_pose)
+        self.client.stream_pose(on_pose, self._stop_pose)
 
     def _publish_latest_pose(self) -> None:
         with self._pose_lock:
@@ -182,7 +182,7 @@ class ChassisBridgeNode(Node):
 
     def _handle_get_pose(self, _request, response):
         try:
-            pose = self.client.fetch_pose_once(self.map_info)
+            pose = self.client.fetch_pose_once()
             response.success = True
             response.x = pose.x
             response.y = pose.y
@@ -200,7 +200,6 @@ class ChassisBridgeNode(Node):
                 request.x,
                 request.y,
                 request.theta_deg,
-                self.map_info,
                 follow_road_net=request.follow_road_net,
             )
             response.success = True
@@ -251,7 +250,8 @@ def main(args=None):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

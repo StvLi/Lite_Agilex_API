@@ -17,5 +17,5 @@ if ! /usr/bin/python3 -c "import websockets, PIL, requests" 2>/dev/null; then
   "${SCRIPT_DIR}/install_ros_deps.sh"
 fi
 
-echo "提示：在其他终端调用 ros2 service/topic 前请执行: source ${ROOT_DIR}/scripts/ros2_env.sh"
+echo "提示：ROS2 命令可直接用 scripts/cmd_*.sh（无需手动 conda/source）"
 exec ros2 run agilex_chassis_bridge chassis_bridge

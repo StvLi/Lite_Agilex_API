@@ -233,6 +233,48 @@ ros2 service call /agilex/navigate_to_pose agilex_msgs/srv/NavigateToPose \
 
 ---
 
+## 2026-07-11 — 统一地图交互为图像像素坐标
+
+### 背景
+
+与 coworker 讨论后决定：所有地图相关交互（位姿输出、导航输入、Web、VLM 导出）统一为 **PNG 图像像素坐标**，便于 VLM 直接对照平面图调用。公制米制坐标不再作为对外接口。
+
+### 约定
+
+- 原点：PNG 左上角；x 向右、y 向下；`theta_deg` 不变
+- `get_pose` / `/agilex/pose` / `navigate_to_pose` / Web API 全部使用像素
+- VLM `map.yaml`：`resolution: 1.0`，`coordinate_mode: image_pixel`
+- 底盘公制参数移至 `meta.json` → `chassis_metric`
+
+### 后续
+
+- [ ] delta 位置/朝向增量控制接口（精细调节，待实现）
+- [ ] 导航运动精度与目标点准确性标定
+
+---
+
+## 2026-07-11 — 初步联调通过（上下行数据可用）
+
+### 环境
+
+- 操作机：桌面开发机；底盘 `10.7.5.99`；地图 `hacthon_hall`
+- 终端 A：`run_bridge.sh`；终端 B：`run_map_viewer.sh`；终端 D：`cmd_*.sh`
+
+### 结论
+
+- **上行**：`get_pose`、Web 位姿箭头、`/agilex/pose` 均返回图像像素坐标，与 PNG 一致。
+- **下行**：`navigate_to_pose`、Web 点击导航可下发任务并收到 `success=True`。
+- **VLM 导出**：`cmd_save_debug_map.sh` 生成 `map.png` / `map.yaml`（`coordinate_mode: image_pixel`）。
+- **待确认**：运动是否准确到达目标像素/朝向，需进一步现场标定。
+
+### 修复（联调过程中）
+
+- Web 地图在底盘导航进行中 `switch_map` 失败不再导致启动崩溃。
+- 桥接 Ctrl+C 不再重复 `rcl_shutdown` 报错。
+- 新增 `bootstrap_once.sh`、`cmd_*.sh`、`run_ros2.sh` 无脑启动脚本。
+
+---
+
 ## 调试记录模板（复制使用）
 
 ```markdown

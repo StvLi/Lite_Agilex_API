@@ -20,12 +20,11 @@ from agilex_client import AgilexClient, load_config  # noqa: E402
 app = FastAPI(title="Agilex Map Viewer")
 _client: AgilexClient | None = None
 _map_name: str = ""
-_map_info = None
 _frame_id: str = "agilex_map"
 
 
 def _get_client() -> AgilexClient:
-    global _client, _map_name, _map_info, _frame_id
+    global _client, _map_name, _frame_id
     if _client is None:
         cfg = load_config()
         chassis = cfg["chassis"]
@@ -40,8 +39,11 @@ def _get_client() -> AgilexClient:
             password=auth["password"],
         )
         _client.login()
-        _client.switch_map(_map_name)
-        _map_info = _client.get_map_info(_map_name)
+        try:
+            _client.switch_map(_map_name)
+        except RuntimeError:
+            # 底盘导航进行中时 switch_map 会返回「状态有误」，不影响读图与位姿
+            pass
     return _client
 
 
@@ -65,11 +67,9 @@ async def get_map():
     return {
         "map_name": _map_name,
         "frame_id": _frame_id,
+        "coordinate_mode": "image_pixel",
         "width": info.width,
         "height": info.height,
-        "origin_x": info.origin_x,
-        "origin_y": info.origin_y,
-        "resolution": info.resolution,
         "image_data_url": f"data:image/png;base64,{b64}",
     }
 
@@ -81,7 +81,6 @@ async def navigate(payload: dict):
         float(payload["x"]),
         float(payload["y"]),
         float(payload.get("theta_deg", 0.0)),
-        _map_info,
         follow_road_net=bool(payload.get("follow_road_net", False)),
     )
     return {"success": True}
@@ -91,7 +90,6 @@ async def navigate(payload: dict):
 async def pose_stream(websocket: WebSocket):
     await websocket.accept()
     client = _get_client()
-    info = client.get_map_info(_map_name)
 
     try:
         import websockets
@@ -104,17 +102,10 @@ async def pose_stream(websocket: WebSocket):
                 data = msg.get("data")
                 if not data or "position" not in data:
                     continue
-                from agilex_client.coords import grid_to_world
-
-                gx = float(data["position"]["x"])
-                gy = float(data["position"]["y"])
-                wx, wy = grid_to_world(gx, gy, info)
                 await websocket.send_json(
                     {
-                        "grid_x": gx,
-                        "grid_y": gy,
-                        "x": wx,
-                        "y": wy,
+                        "x": float(data["position"]["x"]),
+                        "y": float(data["position"]["y"]),
                         "theta_deg": float(data.get("angle", 0.0)),
                     }
                 )

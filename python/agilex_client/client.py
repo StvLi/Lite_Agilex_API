@@ -18,16 +18,16 @@ try:
 except ImportError:  # pragma: no cover
     websockets = None
 
-from .coords import MapInfo, grid_to_world, world_to_grid
+from .coords import MapInfo
 
 
 @dataclass
 class Pose2D:
+    """地图图像像素系位姿（PNG 左上角为原点，y 向下）。"""
+
     x: float
     y: float
     theta_deg: float
-    grid_x: float
-    grid_y: float
 
 
 class AgilexClient:
@@ -133,16 +133,14 @@ class AgilexClient:
         x: float,
         y: float,
         angle_deg: float,
-        map_info: MapInfo,
         follow_road_net: bool = False,
         sn: str = "",
     ) -> None:
-        # 底盘 HTTP 导航接口使用栅格坐标（像素整数），非世界坐标（米）。
+        """下发任意点导航。x/y 为地图图像像素坐标。"""
         self._try_stop_navigation()
-        gx, gy = world_to_grid(x, y, map_info)
         params: dict[str, Any] = {
-            "x": int(round(gx)),
-            "y": int(round(gy)),
+            "x": int(round(x)),
+            "y": int(round(y)),
             "angle": int(round(angle_deg)) % 360,
             "type": "0",
             "followRoadNet": str(follow_road_net).lower(),
@@ -151,18 +149,18 @@ class AgilexClient:
             params["sn"] = sn
         self._get("/api/nav/task/point", params)
 
-    def init_pose(self, x: float, y: float, angle_deg: float, map_info: MapInfo) -> None:
-        gx, gy = world_to_grid(x, y, map_info)
+    def init_pose(self, x: float, y: float, angle_deg: float) -> None:
+        """重定位。x/y 为地图图像像素坐标。"""
         self._get(
             "/api/nav/init/pose",
             {
-                "x": int(round(gx)),
-                "y": int(round(gy)),
+                "x": int(round(x)),
+                "y": int(round(y)),
                 "angle": int(round(angle_deg)) % 360,
             },
         )
 
-    def fetch_pose_once(self, map_info: MapInfo) -> Pose2D:
+    def fetch_pose_once(self) -> Pose2D:
         if websockets is None:
             raise RuntimeError("需要安装 websockets 包")
 
@@ -174,23 +172,16 @@ class AgilexClient:
                     msg = json.loads(raw)
                     data = msg.get("data")
                     if data and "position" in data:
-                        gx = float(data["position"]["x"])
-                        gy = float(data["position"]["y"])
-                        angle = float(data.get("angle", 0.0))
-                        wx, wy = grid_to_world(gx, gy, map_info)
                         return Pose2D(
-                            x=wx,
-                            y=wy,
-                            theta_deg=angle,
-                            grid_x=gx,
-                            grid_y=gy,
+                            x=float(data["position"]["x"]),
+                            y=float(data["position"]["y"]),
+                            theta_deg=float(data.get("angle", 0.0)),
                         )
 
         return asyncio.run(_recv())
 
     def stream_pose(
         self,
-        map_info: MapInfo,
         on_pose: Callable[[Pose2D], None],
         stop_event: threading.Event,
     ) -> None:
@@ -209,17 +200,11 @@ class AgilexClient:
                     data = msg.get("data")
                     if not data or "position" not in data:
                         continue
-                    gx = float(data["position"]["x"])
-                    gy = float(data["position"]["y"])
-                    angle = float(data.get("angle", 0.0))
-                    wx, wy = grid_to_world(gx, gy, map_info)
                     on_pose(
                         Pose2D(
-                            x=wx,
-                            y=wy,
-                            theta_deg=angle,
-                            grid_x=gx,
-                            grid_y=gy,
+                            x=float(data["position"]["x"]),
+                            y=float(data["position"]["y"]),
+                            theta_deg=float(data.get("angle", 0.0)),
                         )
                     )
 

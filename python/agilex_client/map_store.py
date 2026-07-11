@@ -32,11 +32,12 @@ def export_vlm_map(
 
     map_yaml = {
         "image": "map.png",
-        "resolution": info.resolution,
-        "origin": [info.origin_x, info.origin_y, 0.0],
+        "resolution": 1.0,
+        "origin": [0.0, 0.0, 0.0],
         "width": info.width,
         "height": info.height,
         "frame_id": "agilex_map",
+        "coordinate_mode": "image_pixel",
         "negate": 0,
         "occupied_thresh": 0.65,
         "free_thresh": 0.196,
@@ -55,9 +56,12 @@ def export_vlm_map(
         "map_info": {
             "width": info.width,
             "height": info.height,
-            "origin_x": info.origin_x,
-            "origin_y": info.origin_y,
-            "resolution": info.resolution,
+            "coordinate_mode": "image_pixel",
+            "chassis_metric": {
+                "origin_x": info.origin_x,
+                "origin_y": info.origin_y,
+                "resolution": info.resolution,
+            },
         },
     }
     meta_path.write_text(

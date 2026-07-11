@@ -18,7 +18,7 @@ Status: **已确认，实施中**（2026-07-11）
 | 1 | 使用底盘建立调试场地地图 | 底盘 SLAM 建图（API 或 Web UI）→ 保存为命名地图 | `GET /api/map/create/start`、`/stop`、`/create/save/stop` |
 | 2 | 开发机可交互场地地图 | 浏览器 Web UI：显示 PNG、叠加机器人位姿、点击下发导航 | WS `:6060/real_time_pose` + HTTP 导航 |
 | 3 | ROS2 触发存储/更新 VLM 平面图 | `~/save_debug_map` 服务：拉取 PNG + 元数据，写入固定目录 | `GET /api/map/get/png`、`/api/map/get/all` |
-| 4 | 一键获取当前位姿 | `~/get_pose` 服务：返回 map 系 x/y/θ（米+度） | WS `/real_time_pose` + 栅格→世界坐标转换 |
+| 4 | 一键获取当前位姿 | `~/get_pose` 服务：返回 map 系 x/y/θ（**图像像素**+度） | WS `/real_time_pose` |
 | 5 | 一键设置目标导航 | `~/navigate_to_pose` 服务：下发任意点导航 | `GET /api/nav/task/point` |
 
 ## 技术基线（已验证）
@@ -29,7 +29,7 @@ Status: **已确认，实施中**（2026-07-11）
 登录      : POST /admin/login  JSON  {"username":"admin","password":"..."}
 鉴权      : Authorization: Bearer <accessToken>
 坐标系    : 水平向右为 x 轴，航向角顺时针 0–360°
-位姿 WS   : 返回栅格坐标 (pixel)，导航 API 使用世界坐标 (m)
+位姿 WS   : 返回图像像素 (px, py)，对外接口统一使用像素坐标
 ```
 
 现场已有地图：`test`, `4.7test`, `4.7-2`, `deepcybo`, `hacthon_hall`（分辨率均为 0.05 m/px）。
@@ -82,25 +82,32 @@ Lite_Agilex_API/
 ```yaml
 # data/maps/debug_site/map.yaml
 image: map.png
-resolution: 0.05
-origin: [-48.0509, -40.904, 0.0]   # 来自底盘 map 元数据
+resolution: 1.0
+origin: [0.0, 0.0, 0.0]
 width: 1210
 height: 1240
 frame_id: agilex_map
+coordinate_mode: image_pixel
 ```
 
 附带 `meta.json` 记录 `source_map_name`、`exported_at`、`chassis_host`，供 VLM 流水线引用。
 
-## 坐标转换
+## 坐标系约定（图像像素）
 
-WS 位姿为栅格坐标 `(px, py)`；对外 ROS/ROS2 接口统一使用世界坐标 `(mx, my)`（米）。
-底盘 HTTP 导航/重定位 API 内部使用栅格像素整数，`agilex_client` 会自动转换：
+所有对外地图交互统一使用 **PNG 图像像素坐标**（左上角原点，x 向右、y 向下），便于 VLM 直接对照 `map.png` 调用。
 
-```python
-world_x = px * resolution + origin_x
-world_y = (height - py) * resolution + origin_y
-# 反向：world_to_grid → 取整后调用 /api/nav/task/point
+- WS `/real_time_pose` 原生返回像素坐标，客户端不再转换为公制米
+- ROS2 `get_pose` / `navigate_to_pose` / `/agilex/pose` 均使用像素
+- VLM 导出 `map.yaml`：`resolution: 1.0`，`origin: [0,0,0]`，`coordinate_mode: image_pixel`
+- 底盘公制 `origin/resolution` 仅写入 `meta.json` → `chassis_metric` 供调试
+
+```text
+# 像素坐标直接用于导航，无需换算
+ros2 service call /agilex/navigate_to_pose agilex_msgs/srv/NavigateToPose \
+  "{x: 665.0, y: 350.0, theta_deg: 90.0, follow_road_net: false}"
 ```
+
+> 后续计划：开放 delta 位置/朝向增量控制接口，用于精细调节（尚未实现）。
 
 ## 分阶段实施
 
@@ -115,7 +122,7 @@ world_y = (height - py) * resolution + origin_y
 ### Phase 1 — ROS2 接口（核心需求 3/4/5）
 
 - [ ] `save_debug_map`：导出 PNG + yaml + meta 到 `data/maps/<name>/`
-- [ ] `get_pose`：WS 取位姿 + 转世界坐标，返回 PoseStamped 等价字段
+- [ ] `get_pose`：WS 取位姿，直接返回图像像素坐标
 - [ ] `navigate_to_pose`：调用 `/api/nav/task/point`
 - [ ] 发布 `/agilex/pose`（1Hz）供其他节点订阅
 
@@ -170,7 +177,7 @@ source scripts/ros2_env.sh
 ros2 service call /agilex/save_debug_map agilex_msgs/srv/SaveDebugMap "{}"
 ros2 service call /agilex/get_pose agilex_msgs/srv/GetChassisPose "{}"
 ros2 service call /agilex/navigate_to_pose agilex_msgs/srv/NavigateToPose \
-  "{x: 1.0, y: 2.0, theta_deg: 90.0, follow_road_net: false}"
+  "{x: 665.0, y: 350.0, theta_deg: 90.0, follow_road_net: false}"
 ```
 
 ## 待用户确认

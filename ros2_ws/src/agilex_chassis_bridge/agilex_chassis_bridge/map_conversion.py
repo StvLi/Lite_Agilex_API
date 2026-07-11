@@ -31,16 +31,15 @@ def png_bytes_to_occupancy_grid(
 
     occ = OccupancyGrid()
     occ.header = Header(stamp=stamp, frame_id=frame_id)
-    occ.info.resolution = info.resolution
+    occ.info.resolution = 1.0
     occ.info.width = info.width
     occ.info.height = info.height
-    occ.info.origin.position.x = info.origin_x
-    occ.info.origin.position.y = info.origin_y
+    occ.info.origin.position.x = 0.0
+    occ.info.origin.position.y = 0.0
     occ.info.origin.position.z = 0.0
     occ.info.origin.orientation.w = 1.0
-    # PNG 原点在左上，OccupancyGrid 原点在左下
-    flipped = np.flipud(grid)
-    occ.data = flipped.flatten().tolist()
+    # 与 VLM/PNG 一致：行 0 为图像顶部（y 向下），分辨率 1 像素
+    occ.data = grid.flatten().tolist()
 
     img_msg = RosImage()
     img_msg.header = occ.header

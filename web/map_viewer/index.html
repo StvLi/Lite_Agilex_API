@@ -31,43 +31,37 @@
     const statusEl = document.getElementById("status");
     const titleEl = document.getElementById("title");
 
-    function worldToPixel(wx, wy) {
-      const px = (wx - meta.origin_x) / meta.resolution;
-      const py = meta.height - (wy - meta.origin_y) / meta.resolution;
-      const sx = px * mapEl.clientWidth / meta.width;
-      const sy = py * mapEl.clientHeight / meta.height;
-      return { sx, sy, px, py };
+    function mapPixelToScreen(px, py) {
+      return {
+        sx: px * mapEl.clientWidth / meta.width,
+        sy: py * mapEl.clientHeight / meta.height,
+      };
     }
 
-    function pixelToWorld(px, py) {
-      const scaleX = meta.width / mapEl.clientWidth;
-      const scaleY = meta.height / mapEl.clientHeight;
-      const gx = px * scaleX;
-      const gy = py * scaleY;
-      const wx = gx * meta.resolution + meta.origin_x;
-      const wy = (meta.height - gy) * meta.resolution + meta.origin_y;
-      return { wx, wy };
+    function screenToMapPixel(sx, sy) {
+      return {
+        px: sx * meta.width / mapEl.clientWidth,
+        py: sy * meta.height / mapEl.clientHeight,
+      };
     }
 
     function updateRobot(pose) {
-      const { sx, sy } = worldToPixel(pose.x, pose.y);
+      const { sx, sy } = mapPixelToScreen(pose.x, pose.y);
       robotEl.style.left = `${sx}px`;
       robotEl.style.top = `${sy}px`;
       robotEl.style.transform = `translate(-50%, -50%) rotate(${pose.theta_deg}deg)`;
-      statusEl.textContent = `x=${pose.x.toFixed(2)} y=${pose.y.toFixed(2)} θ=${pose.theta_deg.toFixed(1)}°`;
+      statusEl.textContent = `px=${pose.x.toFixed(1)} py=${pose.y.toFixed(1)} θ=${pose.theta_deg.toFixed(1)}°`;
     }
 
     mapEl.addEventListener("click", async (ev) => {
       if (!meta) return;
       const rect = mapEl.getBoundingClientRect();
-      const px = ev.clientX - rect.left;
-      const py = ev.clientY - rect.top;
-      const { wx, wy } = pixelToWorld(px, py);
-      if (!confirm(`导航到 (${wx.toFixed(2)}, ${wy.toFixed(2)}) ?`)) return;
+      const { px, py } = screenToMapPixel(ev.clientX - rect.left, ev.clientY - rect.top);
+      if (!confirm(`导航到像素 (${px.toFixed(1)}, ${py.toFixed(1)}) ?`)) return;
       await fetch("/api/navigate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ x: wx, y: wy, theta_deg: 0 }),
+        body: JSON.stringify({ x: px, y: py, theta_deg: 0 }),
       });
     });
 
@@ -75,7 +69,7 @@
       const res = await fetch("/api/map");
       meta = await res.json();
       mapEl.src = meta.image_data_url;
-      titleEl.textContent = `调试地图: ${meta.map_name}`;
+      titleEl.textContent = `调试地图: ${meta.map_name}（图像像素坐标）`;
       mapEl.onload = () => {
         const ws = new WebSocket(`ws://${location.host}/ws/pose`);
         ws.onmessage = (ev) => updateRobot(JSON.parse(ev.data));
