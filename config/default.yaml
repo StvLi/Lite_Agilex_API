@@ -1,0 +1,33 @@
+# 松灵智导 RANGER API 配置
+# 复制为 local.yaml 覆盖敏感字段；local.yaml 已 gitignore
+
+chassis:
+  host: "10.7.5.99"
+  ssh_user: "admin"
+  http_base: "http://10.7.5.99"
+  ws_base: "ws://10.7.5.99:6060"
+
+auth:
+  username: "admin"
+  password: "agx12345"
+
+debug_site:
+  map_name: "hacthon_hall"
+  output_dir: "data/maps/hacthon_hall"
+  frame_id: "agilex_map"
+
+ros2:
+  domain_id: 15
+  pose_topic: "/agilex/pose"
+  map_topic: "/agilex/map"
+  map_image_topic: "/agilex/map_image"
+  service_prefix: "/agilex"
+
+web:
+  host: "0.0.0.0"
+  port: 8765
+
+network:
+  http_timeout_sec: 30
+  ws_timeout_sec: 10
+  mapping_timeout_sec: 180

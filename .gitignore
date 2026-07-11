@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Local overrides
+config/local.yaml
+
+# Downloaded maps and runtime artifacts
+data/
+
+# IDE
+.vscode/
+.idea/
+
+# Third-party vendor trees
+third_party/
