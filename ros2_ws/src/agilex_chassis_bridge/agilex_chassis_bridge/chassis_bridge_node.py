@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import threading
 from pathlib import Path
@@ -10,6 +11,7 @@ import rclpy
 import yaml
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import OccupancyGrid
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Image
@@ -22,7 +24,23 @@ from agilex_msgs.srv import (
     StopMapping,
 )
 
-ROOT = Path(__file__).resolve().parents[3]
+def find_repo_root() -> Path:
+    env_root = os.environ.get("LITE_AGILEX_API_ROOT")
+    if env_root:
+        root = Path(env_root).resolve()
+        if (root / "config" / "default.yaml").exists():
+            return root
+
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if (parent / "config" / "default.yaml").exists():
+            return parent
+    raise FileNotFoundError(
+        "无法定位 Lite_Agilex_API 仓库根目录（缺少 config/default.yaml）"
+    )
+
+
+ROOT = find_repo_root()
 sys.path.insert(0, str(ROOT / "python"))
 
 from agilex_client import AgilexClient, export_vlm_map  # noqa: E402
