@@ -184,6 +184,55 @@ ros2 service call /agilex/get_pose agilex_msgs/srv/GetChassisPose "{}"
 
 ---
 
+## 2026-07-11 — get_pose 服务验证通过
+
+### 操作
+
+```bash
+source scripts/ros2_env.sh
+ros2 service call /agilex/get_pose agilex_msgs/srv/GetChassisPose "{}"
+```
+
+### 现象
+
+- 返回 `success: true`，`x/y/theta_deg` 与 Web 地图位姿箭头一致（约 1 Hz 更新）。
+- 坐标系为 `agilex_map` 世界坐标（米），与 `/agilex/pose` 话题一致。
+
+### 结论
+
+- **需求 4（获取当前位姿）** ROS2 服务在开发机上验证通过。
+
+### 下一步
+
+- 验证 `navigate_to_pose` 任意点导航。
+
+---
+
+## 2026-07-11 — navigate_to_pose 500 错误修复
+
+### 操作
+
+```bash
+ros2 service call /agilex/navigate_to_pose agilex_msgs/srv/NavigateToPose \
+  "{x: -15.0, y: 3.6, theta_deg: 0.0, follow_road_net: false}"
+```
+
+### 现象
+
+- 修复前：HTTP 500，`/api/nav/task/point` 直接传入世界坐标（米）浮点数。
+- 实测底盘 API 要求 **栅格像素整数**；浮点或米制坐标均返回 500。
+
+### 修复
+
+- `agilex_client.navigate_to_point()`：`world_to_grid()` 后 `int(round())`，下发前自动 `task/stop`。
+- ROS2 桥接 / Web 地图仍使用世界坐标（与 `get_pose` 一致），转换在客户端完成。
+
+### 结论
+
+- 世界坐标 `(-15.0, 3.6)` → 栅格 `(661, 350)` 后导航返回 `开启导航成功`。
+
+---
+
 ## 调试记录模板（复制使用）
 
 ```markdown

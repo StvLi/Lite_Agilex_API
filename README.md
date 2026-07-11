@@ -184,7 +184,7 @@ source scripts/ros2_env.sh
 ros2 topic echo /agilex/pose --once
 ```
 
-**预期**：返回含 `position.x/y` 和 `orientation` 的 `PoseStamped`。
+**预期**：返回含 `position.x/y` 和 `orientation` 的 `PoseStamped`（世界坐标，单位米）。
 
 ### 步骤 6：建图流程（需求 1，需现场推车）
 
@@ -242,9 +242,13 @@ theta_deg: <float>   # 0–360
 frame_id: agilex_map
 ```
 
+也可持续观察：`ros2 topic echo /agilex/pose`（与 Web 地图箭头应一致）。
+
 ### 步骤 9：目标点导航（需求 5）
 
 > **安全提醒**：确认场地无障碍、急停可用；先在小范围、低速区域测试。
+>
+> **坐标说明**：`x/y/theta_deg` 使用 **世界坐标（米/度）**，与 `get_pose` 返回值一致；客户端会自动转换为底盘 HTTP API 所需的栅格像素整数。
 
 ```bash
 source scripts/ros2_env.sh
@@ -317,4 +321,5 @@ python examples/ws_subscribe_status.py
 | RViz 无地图 | 确认 `run_bridge.sh` 在运行且 `ROS_DOMAIN_ID=15` |
 | Web 地图无位姿 | 确认底盘 WS `:6060/real_time_pose` 可达 |
 | `The passed service type is invalid` | 先 `source scripts/ros2_env.sh`，再调用 `ros2 service` |
+| `navigate_to_pose` HTTP 500 | 已修复：客户端自动将米制世界坐标转为栅格整数；若仍失败先 `ros2 service call /agilex/...` 确认桥接在跑 |
 | conda 安装慢 | 脚本已内置 USTC/Aliyun 回退；环境存在时仅 pip |

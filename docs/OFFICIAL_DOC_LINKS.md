@@ -26,7 +26,7 @@ Date: 2026-07-11
 | 登录 | `POST /admin/login` JSON | `POST /apiUrl/user/passport/login` |
 | 鉴权 | `Authorization: <accessToken>` | `Authorization: <token>` |
 | 地图列表 | `GET /api/map/get/all` | `GET /apiUrl/map_list` |
-| 任意点导航 | `GET /api/nav/task/point?x=&y=&angle=` | `POST /apiUrl/realtime_task` |
+| 任意点导航 | `GET /api/nav/task/point?x=&y=&angle=`（**栅格像素整数**） | `POST /apiUrl/realtime_task` |
 | WebSocket | `/real_time_pose` 等 | `ws://IP:9090` ROS 话题桥 |
 
 ## API 分组（共 56 个接口）

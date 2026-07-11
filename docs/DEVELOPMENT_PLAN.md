@@ -93,12 +93,13 @@ frame_id: agilex_map
 
 ## 坐标转换
 
-WS 位姿为栅格坐标 `(px, py)`，导航 API 需世界坐标 `(mx, my)`：
+WS 位姿为栅格坐标 `(px, py)`；对外 ROS/ROS2 接口统一使用世界坐标 `(mx, my)`（米）。
+底盘 HTTP 导航/重定位 API 内部使用栅格像素整数，`agilex_client` 会自动转换：
 
 ```python
 world_x = px * resolution + origin_x
 world_y = (height - py) * resolution + origin_y
-# 反向用于 Web UI 点击像素 → 导航目标
+# 反向：world_to_grid → 取整后调用 /api/nav/task/point
 ```
 
 ## 分阶段实施
