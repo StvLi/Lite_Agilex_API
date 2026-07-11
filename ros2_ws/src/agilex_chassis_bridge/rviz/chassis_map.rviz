@@ -6,30 +6,35 @@ Panels:
 Visualization Manager:
   Class: ""
   Displays:
-    - Alpha: 0.7
+    - Alpha: 0.85
       Class: rviz_default_plugins/Map
+      Color Scheme: map
+      Draw Behind: false
       Enabled: true
       Name: AgilexMap
       Topic:
-        Depth: 5
-        Durability Policy: Volatile
+        Depth: 1
+        Durability Policy: Transient Local
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /agilex/map
       Value: true
-    - Class: rviz_default_plugins/Pose
+    - Alpha: 1
+      Class: rviz_default_plugins/Axes
       Enabled: true
-      Name: RobotPose
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /agilex/pose
+      Length: 30
+      Name: RobotAxes
+      Radius: 1
+      Reference Frame: base_link
       Value: true
     - Class: rviz_default_plugins/TF
       Enabled: true
+      Frame Timeout: 15
+      Marker Scale: 1
       Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
       Value: true
   Enabled: true
   Global Options:
@@ -44,7 +49,8 @@ Visualization Manager:
     Current:
       Class: rviz_default_plugins/TopDownOrtho
       Name: Current View
-      Scale: 20
+      Scale: 5
+      Target Frame: agilex_map
       Value: TopDownOrtho (rviz)
     Saved: ~
 Window Geometry:

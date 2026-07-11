@@ -38,8 +38,8 @@ def png_bytes_to_occupancy_grid(
     occ.info.origin.position.y = 0.0
     occ.info.origin.position.z = 0.0
     occ.info.origin.orientation.w = 1.0
-    # 与 VLM/PNG 一致：行 0 为图像顶部（y 向下），分辨率 1 像素
-    occ.data = grid.flatten().tolist()
+    # RViz/nav_msgs 约定：原点在左下，行 0 为南侧；像素 API 仍为图像左上
+    occ.data = np.flipud(grid).flatten().tolist()
 
     img_msg = RosImage()
     img_msg.header = occ.header

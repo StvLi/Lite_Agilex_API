@@ -253,6 +253,27 @@ ros2 service call /agilex/navigate_to_pose agilex_msgs/srv/NavigateToPose \
 
 ---
 
+## 2026-07-11 — RViz 地图/TF 显示修复
+
+### 现象
+
+- Fixed Frame `agilex_map does not exist`；AgilexMap `No map received`。
+- Panel 插件问题已在前序 commit 修复。
+
+### 原因
+
+1. 桥接地图 QoS 为 `TRANSIENT_LOCAL`，RViz 配置为 `Volatile`，订阅不匹配。
+2. 未发布 `agilex_map` → `base_link` TF，Fixed Frame 无法解析。
+3. OccupancyGrid 未按 ROS 惯例 `flipud`（左下原点），Map 插件无法正确渲染。
+
+### 修复
+
+- 桥接节点增加 `tf2_ros` 广播（像素 y 转为 ROS y：`height - py`）。
+- `chassis_map.rviz` 地图 QoS 改为 Transient Local；用 Axes+TF 显示机器人。
+- `/agilex/pose` 仍为图像像素坐标（API 不变）。
+
+---
+
 ## 2026-07-11 — 初步联调通过（上下行数据可用）
 
 ### 环境

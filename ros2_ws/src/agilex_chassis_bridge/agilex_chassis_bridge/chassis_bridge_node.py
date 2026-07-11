@@ -7,11 +7,12 @@ import threading
 from pathlib import Path
 
 import rclpy
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, TransformStamped
 from nav_msgs.msg import OccupancyGrid
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Image
+from tf2_ros import TransformBroadcaster
 
 from agilex_msgs.srv import (
     GetChassisPose,
@@ -53,6 +54,7 @@ class ChassisBridgeNode(Node):
         ros_cfg = self.cfg["ros2"]
 
         self.frame_id = debug["frame_id"]
+        self.robot_frame = "base_link"
         self.map_name = debug["map_name"]
         self.output_dir = str(find_project_root() / debug["output_dir"])
         self.service_prefix = ros_cfg["service_prefix"].rstrip("/")
@@ -91,6 +93,7 @@ class ChassisBridgeNode(Node):
         self.pose_pub = self.create_publisher(PoseStamped, ros_cfg["pose_topic"], 10)
         self.map_pub = self.create_publisher(OccupancyGrid, ros_cfg["map_topic"], qos)
         self.map_image_pub = self.create_publisher(Image, ros_cfg["map_image_topic"], qos)
+        self.tf_broadcaster = TransformBroadcaster(self)
         self._publish_map_once()
 
         self.create_service(
@@ -145,6 +148,18 @@ class ChassisBridgeNode(Node):
 
         self.client.stream_pose(on_pose, self._stop_pose)
 
+    def _publish_robot_tf(self, pose) -> None:
+        # RViz 使用 ROS 地图坐标（y 向上）；/agilex/pose 仍为图像像素（y 向下）
+        tf_msg = TransformStamped()
+        tf_msg.header.stamp = self.get_clock().now().to_msg()
+        tf_msg.header.frame_id = self.frame_id
+        tf_msg.child_frame_id = self.robot_frame
+        tf_msg.transform.translation.x = float(pose.x)
+        tf_msg.transform.translation.y = float(self.map_info.height) - float(pose.y)
+        tf_msg.transform.translation.z = 0.0
+        tf_msg.transform.rotation = theta_deg_to_quaternion(pose.theta_deg)
+        self.tf_broadcaster.sendTransform(tf_msg)
+
     def _publish_latest_pose(self) -> None:
         with self._pose_lock:
             pose = self._latest_pose
@@ -157,6 +172,7 @@ class ChassisBridgeNode(Node):
         msg.pose.position.y = pose.y
         msg.pose.orientation = theta_deg_to_quaternion(pose.theta_deg)
         self.pose_pub.publish(msg)
+        self._publish_robot_tf(pose)
 
     def _handle_save_debug_map(self, request, response):
         map_name = request.map_name or self.map_name
