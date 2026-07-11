@@ -31,7 +31,8 @@ Lite_Agilex_API/
   web/map_viewer/              # 浏览器交互地图
   scripts/
     setup_conda_env.sh         # 创建/更新 conda 环境（含镜像回退）
-    env.sh                     # 激活项目环境
+    env.sh                     # 激活项目 Python 环境
+    ros2_env.sh                # source 后可用 ros2 CLI（含 agilex_msgs）
     check_connectivity.sh
     build_ros_ws.sh
     run_bridge.sh              # ROS2 桥接节点
@@ -63,7 +64,12 @@ conda activate lite_agilex_api
 
 ## ROS2 接口一览
 
-前提：`export ROS_DOMAIN_ID=15`（与整车其他 ROS 节点一致）。
+前提：
+
+1. `export ROS_DOMAIN_ID=15`（与整车其他 ROS 节点一致）
+2. **每个新终端**在调用 `ros2` 前执行：`source scripts/ros2_env.sh`（加载 `agilex_msgs` 等自定义接口）
+
+> 若跳过第 2 步，`ros2 service call ... agilex_msgs/srv/...` 会报 **The passed service type is invalid**。
 
 ### 话题（发布）
 
@@ -174,8 +180,7 @@ cd /home/stvli/Desktop/where_is_my_key/src/Lite_Agilex_API
 **终端 D — 观察话题**（桥接运行中时）：
 
 ```bash
-export ROS_DOMAIN_ID=15
-source /home/stvli/Desktop/where_is_my_key/src/Lite_Agilex_API/ros2_ws/install/setup.bash
+source scripts/ros2_env.sh
 ros2 topic echo /agilex/pose --once
 ```
 
@@ -186,8 +191,7 @@ ros2 topic echo /agilex/pose --once
 > 仅在需要**新建或更新**场地地图时执行；已有 `hacthon_hall` 可跳过。
 
 ```bash
-export ROS_DOMAIN_ID=15
-source ros2_ws/install/setup.bash
+source scripts/ros2_env.sh
 
 # 启动建图（默认地图名来自 config）
 ros2 service call /agilex/start_mapping agilex_msgs/srv/StartMapping \
@@ -205,6 +209,7 @@ ros2 service call /agilex/stop_mapping agilex_msgs/srv/StopMapping \
 ### 步骤 7：导出 VLM 平面图（需求 3）
 
 ```bash
+source scripts/ros2_env.sh
 ros2 service call /agilex/save_debug_map agilex_msgs/srv/SaveDebugMap "{}"
 ```
 
@@ -223,6 +228,7 @@ cat data/maps/hacthon_hall/map.yaml
 ### 步骤 8：获取当前位姿（需求 4）
 
 ```bash
+source scripts/ros2_env.sh
 ros2 service call /agilex/get_pose agilex_msgs/srv/GetChassisPose "{}"
 ```
 
@@ -241,6 +247,8 @@ frame_id: agilex_map
 > **安全提醒**：确认场地无障碍、急停可用；先在小范围、低速区域测试。
 
 ```bash
+source scripts/ros2_env.sh
+
 # 将 x/y/theta_deg 替换为安全区域内的实测值
 ros2 service call /agilex/navigate_to_pose agilex_msgs/srv/NavigateToPose \
   "{x: 0.0, y: 0.0, theta_deg: 0.0, follow_road_net: false}"
@@ -308,4 +316,5 @@ python examples/ws_subscribe_status.py
 | `ros2: command not found` | `source /opt/ros/jazzy/setup.bash` |
 | RViz 无地图 | 确认 `run_bridge.sh` 在运行且 `ROS_DOMAIN_ID=15` |
 | Web 地图无位姿 | 确认底盘 WS `:6060/real_time_pose` 可达 |
+| `The passed service type is invalid` | 先 `source scripts/ros2_env.sh`，再调用 `ros2 service` |
 | conda 安装慢 | 脚本已内置 USTC/Aliyun 回退；环境存在时仅 pip |

@@ -162,9 +162,10 @@ bool success
 string message
 ```
 
-调用示例：
+调用示例（先 `source scripts/ros2_env.sh`）：
 
 ```bash
+source scripts/ros2_env.sh
 ros2 service call /agilex/save_debug_map agilex_msgs/srv/SaveDebugMap "{}"
 ros2 service call /agilex/get_pose agilex_msgs/srv/GetChassisPose "{}"
 ros2 service call /agilex/navigate_to_pose agilex_msgs/srv/NavigateToPose \

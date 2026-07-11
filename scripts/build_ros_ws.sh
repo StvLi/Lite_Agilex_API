@@ -17,4 +17,6 @@ source /opt/ros/jazzy/setup.bash
 set -u
 cd "${WS_DIR}"
 colcon build --symlink-install "$@"
-echo "source ${WS_DIR}/install/setup.bash"
+echo ""
+echo "编译完成。在其他终端调用 ros2 前请执行："
+echo "  source ${ROOT_DIR}/scripts/ros2_env.sh"

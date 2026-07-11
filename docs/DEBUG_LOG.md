@@ -131,6 +131,59 @@ conda activate lite_agilex_api
 
 ---
 
+## 2026-07-11 — Web 交互地图验证通过
+
+### 环境
+
+- 操作机：桌面开发机
+- 底盘：`10.7.5.99`，地图 `hacthon_hall`
+- 终端 A：`run_bridge.sh`；终端 B：`run_map_viewer.sh`
+
+### 现象
+
+- 曾出现 `web/__init__.py` 被误写为路径文本，导致 `python -m web.map_viewer.server` 报 `NameError: name 'web' is not defined`。
+- 修复后 Web 地图显示正常：平面图、位姿箭头约 1 Hz 更新、点击导航可用。
+
+### 修复
+
+- `run_map_viewer.sh` 改为直接执行 `server.py`，`uvicorn.run(app)` 避免包路径导入。
+- 补全 `web/__init__.py` 与 `web/map_viewer/__init__.py` 合法内容。
+
+### 结论
+
+- **需求 2（Web 交互地图）** 在开发机上验证通过。
+
+---
+
+## 2026-07-11 — get_pose 服务 CLI 报错
+
+### 操作
+
+```bash
+ros2 service call /agilex/get_pose agilex_msgs/srv/GetChassisPose "{}"
+```
+
+### 现象
+
+- 未 source 工作区时：`The passed service type is invalid`
+- `ros2 interface show agilex_msgs/srv/GetChassisPose` → `Unknown package 'agilex_msgs'`
+
+### 结论
+
+- 非 srv 定义错误；新终端未加载 `ros2_ws/install/setup.bash`，`agilex_msgs` 未进入 `AMENT_PREFIX_PATH`。
+- source 后服务调用正常，返回 `success: true` 及 x/y/θ。
+
+### 修复
+
+- 新增 `scripts/ros2_env.sh`（`ROS_DOMAIN_ID` + Jazzy + 工作区 overlay）。
+- README / `run_bridge.sh` / `build_ros_ws.sh` 提示先 source 该脚本。
+
+### 下一步
+
+- 继续验证 `save_debug_map`、`navigate_to_pose`、RViz2 显示。
+
+---
+
 ## 调试记录模板（复制使用）
 
 ```markdown
