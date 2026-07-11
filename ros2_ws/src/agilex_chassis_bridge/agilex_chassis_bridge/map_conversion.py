@@ -6,7 +6,7 @@ import math
 from io import BytesIO
 
 import numpy as np
-from PIL import Image as PilImage
+from PIL import Image
 
 from agilex_client.coords import MapInfo
 
@@ -18,10 +18,10 @@ def png_bytes_to_occupancy_grid(
     stamp,
 ) -> tuple[object, object]:
     from nav_msgs.msg import OccupancyGrid
-    from sensor_msgs.msg import Image as RosImage
+    from sensor_msgs.msg import Image
     from std_msgs.msg import Header
 
-    image = PilImage.open(BytesIO(png_bytes)).convert("L")
+    image = Image.open(BytesIO(png_bytes)).convert("L")
     arr = np.array(image)
 
     # 松灵 PNG：浅色空闲、深色障碍。阈值化到 ROS occupancy [0,100], unknown=-1
@@ -42,7 +42,7 @@ def png_bytes_to_occupancy_grid(
     flipped = np.flipud(grid)
     occ.data = flipped.flatten().tolist()
 
-    img_msg = RosImage()
+    img_msg = Image()
     img_msg.header = occ.header
     img_msg.height, img_msg.width = arr.shape
     img_msg.encoding = "mono8"

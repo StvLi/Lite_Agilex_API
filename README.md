@@ -261,18 +261,19 @@ python examples/ws_subscribe_status.py
 
 ## 配置
 
-编辑 `config/default.yaml`（或复制为 `config/local.yaml`）：
+1. 复制凭据模板：`cp config/local.yaml.example config/local.yaml`
+2. 编辑 `config/local.yaml` 填入松灵 API 登录用户名与密码
+3. 其他参数可在 `config/default.yaml` 查看默认值
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
-| `chassis.host` | `10.7.5.99` | 松灵 Jetson |
-| `auth.username/password` | `admin` / `agx12345` | API 登录 |
+| `chassis.host` | `10.7.5.99` | 松灵 Jetson API 地址 |
 | `debug_site.map_name` | `hacthon_hall` | 调试场地地图 |
 | `debug_site.output_dir` | `data/maps/hacthon_hall` | VLM 导出目录 |
 | `ros2.domain_id` | `15` | ROS 域 ID |
 | `web.port` | `8765` | Web 地图端口 |
 
-硬件详情见 [docs/HARDWARE.md](docs/HARDWARE.md)。
+硬件拓扑见 [docs/HARDWARE.md](docs/HARDWARE.md)（不含凭据）。
 
 ## 官方文档（RANGER AIR/DELTA）
 

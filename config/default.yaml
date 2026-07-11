@@ -1,15 +1,15 @@
 # 松灵智导 RANGER API 配置
-# 复制为 local.yaml 覆盖敏感字段；local.yaml 已 gitignore
+# 复制 config/local.yaml.example 为 config/local.yaml 并填入真实凭据
 
 chassis:
   host: "10.7.5.99"
-  ssh_user: "admin"
+  ssh_user: ""   # 底盘 SSH 用户名，见 local.yaml
   http_base: "http://10.7.5.99"
   ws_base: "ws://10.7.5.99:6060"
 
 auth:
-  username: "admin"
-  password: "agx12345"
+  username: ""   # API 登录用户名，见 local.yaml
+  password: ""   # API 登录密码，见 local.yaml
 
 debug_site:
   map_name: "hacthon_hall"

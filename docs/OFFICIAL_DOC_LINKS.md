@@ -47,7 +47,7 @@ Date: 2026-07-11
 
 ## 帮助手册要点
 
-- 出厂 Web 界面账号：`admin` / `agx12345`（与 `docs/HARDWARE.md` 底盘 SSH 凭据一致）。
+- 登录需 `POST /admin/login` + JSON，凭据配置在 `config/local.yaml`。
 - 任务页支持：点位导航、重定位、任意点导航、切换地图。
 - 高级页支持：地图/点/路网管理。
 - 路网有方向性；导航时可选择沿路网或 A* 最短路径。
@@ -55,10 +55,10 @@ Date: 2026-07-11
 ## 本地底盘实测（2026-07-11）
 
 ```bash
-# 登录（需 POST JSON，文档标注 GET 但现场实现为 POST）
+# 登录（凭据来自 config/local.yaml）
 curl -X POST http://10.7.5.99/admin/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"agx12345"}'
+  -d '{"username":"<API用户名>","password":"<API密码>"}'
 # 返回 accessToken
 
 # 带 token 获取地图

@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import os
 import sys
 import threading
 from pathlib import Path
 
 import rclpy
-import yaml
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import OccupancyGrid
-from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Image
@@ -24,39 +21,26 @@ from agilex_msgs.srv import (
     StopMapping,
 )
 
-def find_repo_root() -> Path:
-    env_root = os.environ.get("LITE_AGILEX_API_ROOT")
-    if env_root:
-        root = Path(env_root).resolve()
-        if (root / "config" / "default.yaml").exists():
-            return root
-
+def _bootstrap_python_path() -> None:
     here = Path(__file__).resolve()
-    for parent in here.parents:
-        if (parent / "config" / "default.yaml").exists():
-            return parent
+    for parent in [here.parent, *here.parents]:
+        python_dir = parent / "python"
+        if (parent / "config" / "default.yaml").exists() and python_dir.is_dir():
+            if str(python_dir) not in sys.path:
+                sys.path.insert(0, str(python_dir))
+            return
     raise FileNotFoundError(
-        "无法定位 Lite_Agilex_API 仓库根目录（缺少 config/default.yaml）"
+        "找不到 Lite_Agilex_API 项目根目录，请设置 LITE_AGILEX_API_ROOT"
     )
 
 
-ROOT = find_repo_root()
-sys.path.insert(0, str(ROOT / "python"))
+_bootstrap_python_path()
 
-from agilex_client import AgilexClient, export_vlm_map  # noqa: E402
+from agilex_client import AgilexClient, export_vlm_map, find_project_root, load_config  # noqa: E402
 from agilex_chassis_bridge.map_conversion import (  # noqa: E402
     png_bytes_to_occupancy_grid,
     theta_deg_to_quaternion,
 )
-
-
-def load_config() -> dict:
-    config_path = ROOT / "config" / "default.yaml"
-    local_path = ROOT / "config" / "local.yaml"
-    if local_path.exists():
-        config_path = local_path
-    with open(config_path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
 
 
 class ChassisBridgeNode(Node):
@@ -70,7 +54,7 @@ class ChassisBridgeNode(Node):
 
         self.frame_id = debug["frame_id"]
         self.map_name = debug["map_name"]
-        self.output_dir = str(ROOT / debug["output_dir"])
+        self.output_dir = str(find_project_root() / debug["output_dir"])
         self.service_prefix = ros_cfg["service_prefix"].rstrip("/")
 
         self.client = AgilexClient(
@@ -80,6 +64,10 @@ class ChassisBridgeNode(Node):
             password=auth["password"],
             timeout=float(self.cfg["network"]["http_timeout_sec"]),
         )
+        if not auth.get("username") or not auth.get("password"):
+            raise RuntimeError(
+                "API 凭据未配置。请复制 config/local.yaml.example 为 config/local.yaml 并填入用户名密码。"
+            )
         self.client.login()
         self.map_info = self.client.get_map_info(self.map_name)
         self.get_logger().info(f"已连接底盘，当前地图: {self.map_name}")
