@@ -18,3 +18,8 @@ data/
 
 # Third-party vendor trees
 third_party/
+
+# ROS2 colcon artifacts
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/

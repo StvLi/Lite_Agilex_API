@@ -115,6 +115,22 @@ conda activate lite_agilex_api
 
 ---
 
+## 2026-07-11 — conda 环境依赖安装验证
+
+### 镜像
+
+- Pip 清华 TUNA 超时后回退 **Aliyun**（`https://mirrors.aliyun.com/pypi/simple/`）
+- 快速路径：环境已存在时仅 `pip install -r requirements.txt`
+
+### 验证结果
+
+- `./scripts/setup_conda_env.sh` 成功
+- 全部 Python 依赖 import 通过
+- `examples/http_get_maps.py` 登录成功，返回 5 张地图
+- `./scripts/build_ros_ws.sh` 编译 `agilex_msgs` + `agilex_chassis_bridge` 成功
+
+---
+
 ## 调试记录模板（复制使用）
 
 ```markdown
