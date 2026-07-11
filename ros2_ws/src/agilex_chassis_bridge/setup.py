@@ -14,7 +14,7 @@ setup(
     install_requires=["setuptools", "PyYAML", "requests", "websockets", "Pillow", "numpy"],
     zip_safe=True,
     maintainer="stvli",
-    maintainer_email="stvli@local",
+    maintainer_email="stvli@example.com",
     description="ROS2 bridge for AgileX chassis HTTP/WS API.",
     license="MIT",
     entry_points={

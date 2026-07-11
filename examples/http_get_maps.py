@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""通过 NAVIS HTTP API 登录并获取地图列表。"""
+"""通过 RANGER HTTP API 登录并获取地图列表。"""
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -21,35 +20,41 @@ def load_config() -> dict:
 
 
 def login(http_base: str, username: str, password: str) -> str:
-    url = f"{http_base.rstrip('/')}/user/passport/login"
-    payload = json.dumps({"username": username, "password": password})
-    headers = {"Content-Type": "application/json"}
-    resp = requests.post(url, headers=headers, data=payload, timeout=10)
+    url = f"{http_base.rstrip('/')}/admin/login"
+    resp = requests.post(
+        url,
+        json={"username": username, "password": password},
+        timeout=10,
+    )
     resp.raise_for_status()
     body = resp.json()
-    token = body.get("data")
-    if not token:
-        raise RuntimeError(f"登录失败: {body}")
-    return token
+    if not body.get("status"):
+        raise RuntimeError(body.get("msg") or "登录失败")
+    return body["data"]["accessToken"]
 
 
 def get_map_list(http_base: str, token: str) -> list:
-    url = f"{http_base.rstrip('/')}/map_list?page=1&limit=-1&sortType=&reverse="
-    headers = {"Authorization": token}
-    resp = requests.get(url, headers=headers, timeout=10)
+    url = f"{http_base.rstrip('/')}/api/map/get/all"
+    resp = requests.get(
+        url,
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=10,
+    )
     resp.raise_for_status()
     body = resp.json()
+    if not body.get("status"):
+        raise RuntimeError(body.get("msg") or "获取地图列表失败")
     return body.get("data") or []
 
 
 def main() -> int:
     cfg = load_config()
-    api = cfg["api"]
-    http_base = api["http_base"]
+    http_base = cfg["chassis"]["http_base"]
+    auth = cfg["auth"]
 
     print(f"目标: {http_base}")
     print("登录中...")
-    token = login(http_base, api["username"], api["password"])
+    token = login(http_base, auth["username"], auth["password"])
     print("登录成功，获取地图列表...")
     maps = get_map_list(http_base, token)
 
@@ -58,7 +63,7 @@ def main() -> int:
     else:
         print(f"共 {len(maps)} 张地图:")
         for item in maps:
-            name = item.get("mapName") or item.get("name") or item
+            name = item.get("name") or item.get("mapName") or item
             print(f"  - {name}")
 
     return 0

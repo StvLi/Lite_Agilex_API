@@ -3,7 +3,7 @@
   <name>agilex_chassis_bridge</name>
   <version>0.1.0</version>
   <description>ROS2 bridge node for AgileX chassis.</description>
-  <maintainer email="stvli@local">stvli</maintainer>
+  <maintainer email="stvli@example.com">stvli</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_python</buildtool_depend>
