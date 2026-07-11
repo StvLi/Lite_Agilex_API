@@ -20,6 +20,8 @@ ros2:
   domain_id: 15
   pose_topic: "/agilex/pose"
   pose_rviz_topic: "/agilex/pose_rviz"
+  init_pose_preview_topic: "/agilex/init_pose_preview"
+  initial_pose_topic: "/initialpose"
   map_topic: "/agilex/map"
   map_image_topic: "/agilex/map_image"
   service_prefix: "/agilex"
@@ -32,3 +34,4 @@ network:
   http_timeout_sec: 30
   ws_timeout_sec: 10
   mapping_timeout_sec: 180
+  localization_timeout_sec: 60

@@ -21,6 +21,7 @@ app = FastAPI(title="Agilex Map Viewer")
 _client: AgilexClient | None = None
 _map_name: str = ""
 _frame_id: str = "agilex_map"
+_pending_init_pose: dict[str, float] | None = None
 
 
 def _get_client() -> AgilexClient:
@@ -84,6 +85,64 @@ async def navigate(payload: dict):
         follow_road_net=bool(payload.get("follow_road_net", False)),
     )
     return {"success": True}
+
+
+@app.post("/api/init_pose")
+async def init_pose(payload: dict):
+    """记录初始位姿（像素），不立即下发底盘。需再调用 /api/start_localization。"""
+    global _pending_init_pose
+    _pending_init_pose = {
+        "x": float(payload["x"]),
+        "y": float(payload["y"]),
+        "theta_deg": float(payload.get("theta_deg", 0.0)),
+    }
+    return {
+        "success": True,
+        **_pending_init_pose,
+        "message": "已记录初始位姿，请调用 /api/start_localization 启动定位优化",
+    }
+
+
+@app.post("/api/start_localization")
+async def start_localization(payload: dict):
+    """拉起底盘定位优化。"""
+    global _pending_init_pose
+    client = _get_client()
+    use_pending = bool(payload.get("use_pending_pose", True))
+    if use_pending:
+        if _pending_init_pose is None:
+            raise RuntimeError("未设置初始位姿，请先调用 /api/init_pose")
+        x = _pending_init_pose["x"]
+        y = _pending_init_pose["y"]
+        theta_deg = _pending_init_pose["theta_deg"]
+    else:
+        x = float(payload["x"])
+        y = float(payload["y"])
+        theta_deg = float(payload.get("theta_deg", 0.0))
+
+    try:
+        client.switch_map(_map_name)
+    except RuntimeError:
+        pass
+    client.init_pose(x, y, theta_deg)
+    result = {
+        "success": True,
+        "localized": False,
+        "x": x,
+        "y": y,
+        "theta_deg": theta_deg,
+        "message": "已下发初始位姿并启动定位优化",
+    }
+    if bool(payload.get("wait_for_ready", False)):
+        timeout = float(payload.get("timeout_sec", 60.0))
+        status = client.wait_for_localization(timeout_sec=timeout)
+        result["localized"] = status.robot_nav_detail_status == 114
+        result["nav_detail_status"] = status.robot_nav_detail_status
+        result["message"] = (
+            f"定位完成: {status.robot_nav_detail_status} "
+            f"{status.robot_nav_detail_status_text}"
+        )
+    return result
 
 
 @app.websocket("/ws/pose")

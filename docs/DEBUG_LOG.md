@@ -296,6 +296,41 @@ ros2 service call /agilex/navigate_to_pose agilex_msgs/srv/NavigateToPose \
 
 ---
 
+## 2026-07-11 — RViz 定位初值 + SLAM 优化流程
+
+### 背景
+
+底盘 SLAM 定位基于优化，启动前需给定合理初始位姿，否则易陷入局部最优。
+
+### 实现
+
+1. RViz **2D Pose Estimate** → `/initialpose` → 桥接缓存像素初值 → 绿色 `/agilex/init_pose_preview`
+2. `/agilex/set_initial_pose` 服务 + `cmd_set_init_pose.sh`
+3. `/agilex/start_localization` 服务 + `cmd_start_localization.sh`
+   - 调用底盘 `GET /api/nav/init/pose`
+   - 可选等待 WS `/real_time_work_status` 至 `robotNavDetailStatus=114`（定位成功）
+4. Web API：`POST /api/init_pose`、`POST /api/start_localization`
+
+### 验证命令
+
+```bash
+# 终端 A
+./scripts/run_bridge.sh
+
+# 终端 D
+./scripts/cmd_set_init_pose.sh 665 350 90
+./scripts/cmd_start_localization.sh --no-wait
+./scripts/cmd_get_pose.sh
+```
+
+### TODO
+
+- VLM 自动设初值（调用 set_initial_pose + start_localization）
+- RViz Panel 一键启动定位按钮
+- Web 地图页交互控件
+
+---
+
 ## 调试记录模板（复制使用）
 
 ```markdown

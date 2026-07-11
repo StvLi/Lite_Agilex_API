@@ -10,6 +10,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/NavigateToPose.srv"
   "srv/StartMapping.srv"
   "srv/StopMapping.srv"
+  "srv/SetInitialPose.srv"
+  "srv/StartLocalization.srv"
 )
 
 ament_export_dependencies(rosidl_default_runtime)

@@ -1,0 +1,12 @@
+# 用已记录的或请求中的初始位姿，拉起底盘 SLAM 定位优化。
+bool use_pending_pose true
+float64 x
+float64 y
+float64 theta_deg
+bool wait_for_ready true
+float64 timeout_sec 60.0
+---
+bool success
+bool localized
+int32 nav_detail_status
+string message

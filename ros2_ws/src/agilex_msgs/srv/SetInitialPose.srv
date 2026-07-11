@@ -1,0 +1,7 @@
+# 记录初始位姿（图像像素坐标），不立即下发底盘。
+float64 x
+float64 y
+float64 theta_deg
+---
+bool success
+string message

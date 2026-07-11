@@ -30,6 +30,30 @@ class Pose2D:
     theta_deg: float
 
 
+@dataclass
+class WorkStatus:
+    map_name: str
+    robot_status: int
+    robot_nav_detail_status: int
+    robot_nav_detail_status_text: str
+
+
+# 底盘导航明细状态（摘自 RANGER API /real_time_work_status）
+NAV_DETAIL_IDLE = 100
+NAV_DETAIL_INIT_RUNNING = 110
+NAV_DETAIL_INIT_SUCCESS = 111
+NAV_DETAIL_INIT_FAILED = 112
+NAV_DETAIL_LOCALIZING = 113
+NAV_DETAIL_LOCALIZED = 114
+NAV_DETAIL_LOCALIZE_FAILED = 115
+NAV_DETAIL_LOCALIZE_LOST = 116
+NAV_DETAIL_FAILURES = {
+    NAV_DETAIL_INIT_FAILED,
+    NAV_DETAIL_LOCALIZE_FAILED,
+    NAV_DETAIL_LOCALIZE_LOST,
+}
+
+
 class AgilexClient:
     def __init__(
         self,
@@ -158,6 +182,57 @@ class AgilexClient:
                 "y": int(round(y)),
                 "angle": int(round(angle_deg)) % 360,
             },
+        )
+
+    def fetch_work_status_once(self) -> WorkStatus:
+        if websockets is None:
+            raise RuntimeError("需要安装 websockets 包")
+
+        async def _recv() -> WorkStatus:
+            url = f"{self.ws_base}/real_time_work_status"
+            async with websockets.connect(url, open_timeout=self.timeout) as ws:
+                while True:
+                    raw = await asyncio.wait_for(ws.recv(), timeout=self.timeout)
+                    msg = json.loads(raw)
+                    data = msg.get("data")
+                    if not data:
+                        continue
+                    return WorkStatus(
+                        map_name=str(data.get("mapName", "")),
+                        robot_status=int(data.get("robotStatus", 0)),
+                        robot_nav_detail_status=int(data.get("robotNavDetailStatus", 0)),
+                        robot_nav_detail_status_text=str(
+                            data.get("robotNavDetailStatusText", "")
+                        ),
+                    )
+
+        return asyncio.run(_recv())
+
+    def wait_for_localization(
+        self,
+        timeout_sec: float = 60.0,
+        poll_interval_sec: float = 0.5,
+    ) -> WorkStatus:
+        """等待底盘完成初始化/定位优化，成功返回最终状态。"""
+        deadline = time.time() + timeout_sec
+        last_status: Optional[WorkStatus] = None
+        while time.time() < deadline:
+            status = self.fetch_work_status_once()
+            last_status = status
+            detail = status.robot_nav_detail_status
+            if detail == NAV_DETAIL_LOCALIZED:
+                return status
+            if detail in NAV_DETAIL_FAILURES:
+                raise RuntimeError(
+                    f"定位失败: {detail} {status.robot_nav_detail_status_text}"
+                )
+            time.sleep(poll_interval_sec)
+        if last_status is None:
+            raise TimeoutError("等待定位状态超时：未收到工作状态")
+        raise TimeoutError(
+            "等待定位状态超时: "
+            f"{last_status.robot_nav_detail_status} "
+            f"{last_status.robot_nav_detail_status_text}"
         )
 
     def fetch_pose_once(self) -> Pose2D:

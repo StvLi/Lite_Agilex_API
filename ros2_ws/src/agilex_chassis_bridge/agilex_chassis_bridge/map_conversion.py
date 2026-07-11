@@ -59,3 +59,25 @@ def theta_deg_to_quaternion(theta_deg: float):
     q.z = math.sin(yaw / 2.0)
     q.w = math.cos(yaw / 2.0)
     return q
+
+
+def quaternion_to_theta_deg(quaternion) -> float:
+    """从四元数提取 yaw（度）。"""
+    x = quaternion.x
+    y = quaternion.y
+    z = quaternion.z
+    w = quaternion.w
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    yaw = math.atan2(siny_cosp, cosy_cosp)
+    return math.degrees(yaw) % 360.0
+
+
+def rviz_pose_to_pixel(x_rviz: float, y_rviz: float, map_height: int) -> tuple[float, float]:
+    """RViz/TF 地图坐标 → 图像像素坐标。"""
+    return float(x_rviz), float(map_height) - float(y_rviz)
+
+
+def pixel_pose_to_rviz(x_pixel: float, y_pixel: float, map_height: int) -> tuple[float, float]:
+    """图像像素坐标 → RViz/TF 地图坐标。"""
+    return float(x_pixel), float(map_height) - float(y_pixel)

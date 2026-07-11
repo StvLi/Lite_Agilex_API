@@ -7,7 +7,7 @@ import threading
 from pathlib import Path
 
 import rclpy
-from geometry_msgs.msg import PoseStamped, TransformStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, TransformStamped
 from nav_msgs.msg import OccupancyGrid
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
@@ -18,6 +18,8 @@ from agilex_msgs.srv import (
     GetChassisPose,
     NavigateToPose,
     SaveDebugMap,
+    SetInitialPose,
+    StartLocalization,
     StartMapping,
     StopMapping,
 )
@@ -37,9 +39,19 @@ def _bootstrap_python_path() -> None:
 
 _bootstrap_python_path()
 
-from agilex_client import AgilexClient, export_vlm_map, find_project_root, load_config  # noqa: E402
+from agilex_client import (  # noqa: E402
+    AgilexClient,
+    NAV_DETAIL_LOCALIZED,
+    Pose2D,
+    export_vlm_map,
+    find_project_root,
+    load_config,
+)
 from agilex_chassis_bridge.map_conversion import (  # noqa: E402
+    pixel_pose_to_rviz,
     png_bytes_to_occupancy_grid,
+    quaternion_to_theta_deg,
+    rviz_pose_to_pixel,
     theta_deg_to_quaternion,
 )
 
@@ -79,7 +91,9 @@ class ChassisBridgeNode(Node):
         self.get_logger().info(f"已连接底盘，当前地图: {self.map_name}")
 
         self._latest_pose = None
+        self._pending_init_pose: Pose2D | None = None
         self._pose_lock = threading.Lock()
+        self._init_pose_lock = threading.Lock()
         self._stop_pose = threading.Event()
         self._pose_thread = threading.Thread(target=self._pose_worker, daemon=True)
         self._pose_thread.start()
@@ -94,6 +108,11 @@ class ChassisBridgeNode(Node):
         self.pose_rviz_pub = self.create_publisher(
             PoseStamped,
             ros_cfg.get("pose_rviz_topic", "/agilex/pose_rviz"),
+            10,
+        )
+        self.init_pose_preview_pub = self.create_publisher(
+            PoseStamped,
+            ros_cfg.get("init_pose_preview_topic", "/agilex/init_pose_preview"),
             10,
         )
         self.map_pub = self.create_publisher(OccupancyGrid, ros_cfg["map_topic"], qos)
@@ -126,6 +145,22 @@ class ChassisBridgeNode(Node):
             f"{self.service_prefix}/stop_mapping",
             self._handle_stop_mapping,
         )
+        self.create_service(
+            SetInitialPose,
+            f"{self.service_prefix}/set_initial_pose",
+            self._handle_set_initial_pose,
+        )
+        self.create_service(
+            StartLocalization,
+            f"{self.service_prefix}/start_localization",
+            self._handle_start_localization,
+        )
+        self.create_subscription(
+            PoseWithCovarianceStamped,
+            ros_cfg.get("initial_pose_topic", "/initialpose"),
+            self._on_initial_pose,
+            10,
+        )
         self.create_timer(1.0, self._publish_latest_pose)
 
     def _make_map_msgs(self):
@@ -155,11 +190,126 @@ class ChassisBridgeNode(Node):
 
     def _pixel_pose_to_rviz(self, pose) -> tuple[float, float, float]:
         """图像像素位姿 → RViz/TF 用的 ROS 地图坐标（y 向上）。"""
-        return (
-            float(pose.x),
-            float(self.map_info.height) - float(pose.y),
-            float(pose.theta_deg),
+        x, y = pixel_pose_to_rviz(float(pose.x), float(pose.y), self.map_info.height)
+        return x, y, float(pose.theta_deg)
+
+    def _rviz_pose_to_pixel(self, x_rviz: float, y_rviz: float) -> tuple[float, float]:
+        return rviz_pose_to_pixel(x_rviz, y_rviz, self.map_info.height)
+
+    def _store_pending_init_pose(self, pose: Pose2D) -> None:
+        with self._init_pose_lock:
+            self._pending_init_pose = pose
+        self._publish_init_pose_preview(pose)
+        self.get_logger().info(
+            "已记录初始位姿（像素）: "
+            f"x={pose.x:.1f}, y={pose.y:.1f}, theta={pose.theta_deg:.1f}°；"
+            f"调用 {self.service_prefix}/start_localization 启动定位优化"
         )
+
+    def _get_pending_init_pose(self) -> Pose2D | None:
+        with self._init_pose_lock:
+            return self._pending_init_pose
+
+    def _publish_init_pose_preview(self, pose: Pose2D) -> None:
+        x, y, theta = self._pixel_pose_to_rviz(pose)
+        msg = PoseStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = self.frame_id
+        msg.pose.position.x = x
+        msg.pose.position.y = y
+        msg.pose.orientation = theta_deg_to_quaternion(theta)
+        self.init_pose_preview_pub.publish(msg)
+
+    def _on_initial_pose(self, msg: PoseWithCovarianceStamped) -> None:
+        if msg.header.frame_id and msg.header.frame_id != self.frame_id:
+            self.get_logger().warning(
+                f"忽略 /initialpose：frame_id={msg.header.frame_id}，"
+                f"期望 {self.frame_id}"
+            )
+            return
+        px, py = self._rviz_pose_to_pixel(
+            msg.pose.pose.position.x,
+            msg.pose.pose.position.y,
+        )
+        theta = quaternion_to_theta_deg(msg.pose.pose.orientation)
+        self._store_pending_init_pose(Pose2D(x=px, y=py, theta_deg=theta))
+
+    def _resolve_init_pose(
+        self,
+        use_pending_pose: bool,
+        x: float,
+        y: float,
+        theta_deg: float,
+    ) -> Pose2D:
+        if use_pending_pose:
+            pending = self._get_pending_init_pose()
+            if pending is None:
+                raise RuntimeError(
+                    "未设置初始位姿。请先在 RViz 使用 2D Pose Estimate，"
+                    f"或调用 {self.service_prefix}/set_initial_pose"
+                )
+            return pending
+        return Pose2D(x=x, y=y, theta_deg=theta_deg)
+
+    def _handle_set_initial_pose(self, request, response):
+        try:
+            pose = Pose2D(
+                x=float(request.x),
+                y=float(request.y),
+                theta_deg=float(request.theta_deg),
+            )
+            self._store_pending_init_pose(pose)
+            response.success = True
+            response.message = (
+                f"已记录初始位姿: x={pose.x:.1f}, y={pose.y:.1f}, "
+                f"theta={pose.theta_deg:.1f}°"
+            )
+        except Exception as exc:
+            response.success = False
+            response.message = str(exc)
+        return response
+
+    def _handle_start_localization(self, request, response):
+        try:
+            pose = self._resolve_init_pose(
+                request.use_pending_pose,
+                float(request.x),
+                float(request.y),
+                float(request.theta_deg),
+            )
+            try:
+                self.client.switch_map(self.map_name)
+            except RuntimeError as exc:
+                self.get_logger().warning(f"启动定位前切换地图跳过: {exc}")
+
+            self.client.init_pose(pose.x, pose.y, pose.theta_deg)
+            response.success = True
+            response.localized = False
+            response.nav_detail_status = 0
+            response.message = (
+                f"已下发初始位姿并启动定位优化: "
+                f"x={pose.x:.1f}, y={pose.y:.1f}, theta={pose.theta_deg:.1f}°"
+            )
+
+            if request.wait_for_ready:
+                timeout = float(request.timeout_sec)
+                if timeout <= 0.0:
+                    timeout = float(self.cfg["network"]["localization_timeout_sec"])
+                status = self.client.wait_for_localization(timeout_sec=timeout)
+                response.localized = (
+                    status.robot_nav_detail_status == NAV_DETAIL_LOCALIZED
+                )
+                response.nav_detail_status = status.robot_nav_detail_status
+                response.message = (
+                    f"定位完成: status={status.robot_nav_detail_status} "
+                    f"{status.robot_nav_detail_status_text}"
+                )
+        except Exception as exc:
+            response.success = False
+            response.localized = False
+            response.nav_detail_status = 0
+            response.message = str(exc)
+        return response
 
     def _publish_robot_tf(self, pose) -> None:
         x, y, theta = self._pixel_pose_to_rviz(pose)
