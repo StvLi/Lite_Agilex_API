@@ -95,7 +95,8 @@ conda activate lite_agilex_api
 
 | 话题 | 类型 | 频率 | 说明 |
 | --- | --- | --- | --- |
-| `/agilex/pose` | `geometry_msgs/PoseStamped` | 1 Hz | 机器人在 `agilex_map` 系下位姿（**图像像素**） |
+| `/agilex/pose` | `geometry_msgs/PoseStamped` | 1 Hz | 机器人位姿（**图像像素**，供 API/VLM） |
+| `/agilex/pose_rviz` | `geometry_msgs/PoseStamped` | 1 Hz | RViz 专用位姿（ROS 地图坐标，含朝向箭头） |
 | `/agilex/map` | `nav_msgs/OccupancyGrid` | 启动时 + 保存后 | 当前调试地图（分辨率 1 像素），供 RViz |
 | `/agilex/map_image` | `sensor_msgs/Image` | 启动时 + 保存后 | 地图灰度图 |
 
@@ -165,7 +166,7 @@ cd /home/stvli/Desktop/where_is_my_key/src/Lite_Agilex_API
 ./scripts/run_rviz.sh
 ```
 
-Fixed Frame = `agilex_map`；地图来自 `/agilex/map`，机器人位置通过 `base_link` TF 显示。
+Fixed Frame = `agilex_map`；地图来自 `/agilex/map`，机器人显示为橙色 **Pose 箭头**（`/agilex/pose_rviz`）+ `base_link` 坐标轴。默认俯视中心在地图正中（`hacthon_hall` 约 1210×1240 px）。
 
 ---
 

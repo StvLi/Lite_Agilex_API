@@ -91,6 +91,11 @@ class ChassisBridgeNode(Node):
             history=HistoryPolicy.KEEP_LAST,
         )
         self.pose_pub = self.create_publisher(PoseStamped, ros_cfg["pose_topic"], 10)
+        self.pose_rviz_pub = self.create_publisher(
+            PoseStamped,
+            ros_cfg.get("pose_rviz_topic", "/agilex/pose_rviz"),
+            10,
+        )
         self.map_pub = self.create_publisher(OccupancyGrid, ros_cfg["map_topic"], qos)
         self.map_image_pub = self.create_publisher(Image, ros_cfg["map_image_topic"], qos)
         self.tf_broadcaster = TransformBroadcaster(self)
@@ -148,16 +153,24 @@ class ChassisBridgeNode(Node):
 
         self.client.stream_pose(on_pose, self._stop_pose)
 
+    def _pixel_pose_to_rviz(self, pose) -> tuple[float, float, float]:
+        """图像像素位姿 → RViz/TF 用的 ROS 地图坐标（y 向上）。"""
+        return (
+            float(pose.x),
+            float(self.map_info.height) - float(pose.y),
+            float(pose.theta_deg),
+        )
+
     def _publish_robot_tf(self, pose) -> None:
-        # RViz 使用 ROS 地图坐标（y 向上）；/agilex/pose 仍为图像像素（y 向下）
+        x, y, theta = self._pixel_pose_to_rviz(pose)
         tf_msg = TransformStamped()
         tf_msg.header.stamp = self.get_clock().now().to_msg()
         tf_msg.header.frame_id = self.frame_id
         tf_msg.child_frame_id = self.robot_frame
-        tf_msg.transform.translation.x = float(pose.x)
-        tf_msg.transform.translation.y = float(self.map_info.height) - float(pose.y)
+        tf_msg.transform.translation.x = x
+        tf_msg.transform.translation.y = y
         tf_msg.transform.translation.z = 0.0
-        tf_msg.transform.rotation = theta_deg_to_quaternion(pose.theta_deg)
+        tf_msg.transform.rotation = theta_deg_to_quaternion(theta)
         self.tf_broadcaster.sendTransform(tf_msg)
 
     def _publish_latest_pose(self) -> None:
@@ -165,13 +178,25 @@ class ChassisBridgeNode(Node):
             pose = self._latest_pose
         if pose is None:
             return
-        msg = PoseStamped()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = self.frame_id
-        msg.pose.position.x = pose.x
-        msg.pose.position.y = pose.y
-        msg.pose.orientation = theta_deg_to_quaternion(pose.theta_deg)
-        self.pose_pub.publish(msg)
+        stamp = self.get_clock().now().to_msg()
+
+        pixel_msg = PoseStamped()
+        pixel_msg.header.stamp = stamp
+        pixel_msg.header.frame_id = self.frame_id
+        pixel_msg.pose.position.x = pose.x
+        pixel_msg.pose.position.y = pose.y
+        pixel_msg.pose.orientation = theta_deg_to_quaternion(pose.theta_deg)
+        self.pose_pub.publish(pixel_msg)
+
+        x, y, theta = self._pixel_pose_to_rviz(pose)
+        rviz_msg = PoseStamped()
+        rviz_msg.header.stamp = stamp
+        rviz_msg.header.frame_id = self.frame_id
+        rviz_msg.pose.position.x = x
+        rviz_msg.pose.position.y = y
+        rviz_msg.pose.orientation = theta_deg_to_quaternion(theta)
+        self.pose_rviz_pub.publish(rviz_msg)
+
         self._publish_robot_tf(pose)
 
     def _handle_save_debug_map(self, request, response):

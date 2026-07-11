@@ -19,6 +19,7 @@ debug_site:
 ros2:
   domain_id: 15
   pose_topic: "/agilex/pose"
+  pose_rviz_topic: "/agilex/pose_rviz"
   map_topic: "/agilex/map"
   map_image_topic: "/agilex/map_image"
   service_prefix: "/agilex"
