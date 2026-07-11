@@ -1,0 +1,8 @@
+string map_name
+string output_dir
+---
+bool success
+string png_path
+string yaml_path
+string meta_path
+string message

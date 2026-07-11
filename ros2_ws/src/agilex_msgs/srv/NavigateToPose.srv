@@ -1,0 +1,7 @@
+float64 x
+float64 y
+float64 theta_deg
+bool follow_road_net false
+---
+bool success
+string message

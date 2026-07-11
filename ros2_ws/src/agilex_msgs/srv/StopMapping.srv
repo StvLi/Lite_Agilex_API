@@ -1,0 +1,5 @@
+bool save_map true
+string remark
+---
+bool success
+string message
