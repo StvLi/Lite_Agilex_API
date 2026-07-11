@@ -1,9 +1,6 @@
-# 本地凭据（勿提交 git）
-# cp config/local.yaml.example config/local.yaml
-
-chassis:
-  host: "10.7.5.99"
-  ssh_user: "<底盘SSH用户名>"
+# 本地凭据覆盖（勿提交 git）
+# 用法: cp config/local.yaml.example config/local.yaml
+# 只需填写 auth 段，其余参数继承 default.yaml
 
 auth:
   username: "<API用户名>"

@@ -262,8 +262,11 @@ python examples/ws_subscribe_status.py
 ## 配置
 
 1. 复制凭据模板：`cp config/local.yaml.example config/local.yaml`
-2. 编辑 `config/local.yaml` 填入松灵 API 登录用户名与密码
-3. 其他参数可在 `config/default.yaml` 查看默认值
+2. 编辑 `config/local.yaml`，**仅填写 `auth` 段**（用户名/密码）
+3. `local.yaml` 会**覆盖** `default.yaml` 中的同名字段，其余参数（IP、地图名、ROS 话题等）仍从 `default.yaml` 继承
+4. `local.yaml` 已加入 `.gitignore`，不会提交到 git
+
+> **说明**：此前清理文档中的错误凭据时引入了 `local.yaml` 机制。之前能跑是因为凭据写在 `default.yaml` 里；现在凭据单独放 `local.yaml`，避免密码出现在代码库中。
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |

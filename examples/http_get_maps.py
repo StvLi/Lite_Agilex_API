@@ -6,17 +6,11 @@ import sys
 from pathlib import Path
 
 import requests
-import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PATH = ROOT / "config" / "default.yaml"
-if (ROOT / "config" / "local.yaml").exists():
-    CONFIG_PATH = ROOT / "config" / "local.yaml"
+sys.path.insert(0, str(ROOT / "python"))
 
-
-def load_config() -> dict:
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+from agilex_client import load_config  # noqa: E402
 
 
 def login(http_base: str, username: str, password: str) -> str:
@@ -52,6 +46,13 @@ def main() -> int:
     http_base = cfg["chassis"]["http_base"]
     auth = cfg["auth"]
 
+    if not auth.get("username") or not auth.get("password"):
+        print(
+            "错误: API 凭据未配置。请编辑 config/local.yaml 填入 auth.username 和 auth.password。",
+            file=sys.stderr,
+        )
+        return 1
+
     print(f"目标: {http_base}")
     print("登录中...")
     token = login(http_base, auth["username"], auth["password"])
@@ -74,6 +75,9 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except requests.RequestException as exc:
         print(f"HTTP 错误: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+    except KeyError as exc:
+        print(f"配置项缺失: {exc}，请检查 config/default.yaml", file=sys.stderr)
         raise SystemExit(1) from exc
     except Exception as exc:
         print(f"错误: {exc}", file=sys.stderr)
