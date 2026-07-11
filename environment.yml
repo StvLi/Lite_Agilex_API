@@ -1,12 +1,10 @@
 # 独立 conda 环境，勿与 base / lite_ros2_env 混用
+# Python 本体走 conda，其余依赖走 pip（见 requirements.txt）
 name: lite_agilex_api
 channels:
-  - conda-forge
+  - defaults
 dependencies:
   - python=3.12
   - pip
-  - numpy>=1.24
-  - pillow>=10.0
-  - pyyaml>=6.0
   - pip:
       - -r requirements.txt
