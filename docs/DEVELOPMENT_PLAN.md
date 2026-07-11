@@ -188,6 +188,13 @@ ffec9b3 feat: add ROS2 chassis bridge for map, pose, and navigation
 576bde4 feat: scaffold Lite Agilex API repo with RANGER docs and dev plan
 ```
 
+## 环境隔离
+
+- Python 依赖统一安装在独立 conda 环境 **`lite_agilex_api`**
+- 创建：`./scripts/setup_conda_env.sh`
+- 激活：`conda activate lite_agilex_api` 或 `source scripts/env.sh`
+- **禁止**在 `base` / `lite_ros2_env` 中为本项目 `pip install`
+
 ## 风险与注意事项
 
 - WS 端口为 **6060**（非文档旧版 9090）；位姿为栅格坐标，必须转换。

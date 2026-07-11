@@ -3,7 +3,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/env.sh"
 cd "${ROOT_DIR}"
-source .venv/bin/activate
-export PYTHONPATH="${ROOT_DIR}/python:${PYTHONPATH:-}"
 exec python -m web.map_viewer.server

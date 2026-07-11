@@ -21,6 +21,7 @@
 ```text
 Lite_Agilex_API/
   README.md
+  environment.yml                # conda 环境定义（lite_agilex_api）
   requirements.txt
   config/
     default.yaml          # API 端点与凭据（勿提交真实密码到公开远端）
@@ -29,13 +30,29 @@ Lite_Agilex_API/
     DEBUG_LOG.md          # 调试过程记录（持续追加）
     API_OVERVIEW.md       # NAVIS 接口概览
   scripts/
+    setup_conda_env.sh    # 创建独立 conda 环境 lite_agilex_api
+    env.sh                # 激活项目 conda 环境
     check_connectivity.sh
-    setup_venv.sh
   examples/
     http_get_maps.py
     ws_subscribe_status.py
   vcs/
     external_repositories.md
+```
+
+## 环境配置
+
+本项目使用**独立 conda 环境** `lite_agilex_api`，请勿在 `base` 或 `lite_ros2_env` 中直接 `pip install`。
+
+```bash
+cd /home/stvli/Desktop/where_is_my_key/src/Lite_Agilex_API
+
+# 一次性创建/更新环境
+./scripts/setup_conda_env.sh
+conda activate lite_agilex_api
+
+# 或在脚本中自动激活
+source scripts/env.sh
 ```
 
 ## 快速开始
@@ -46,12 +63,18 @@ cd /home/stvli/Desktop/where_is_my_key/src/Lite_Agilex_API
 # 1. 检查到松灵底盘的网络连通性
 ./scripts/check_connectivity.sh
 
-# 2. 创建 Python 虚拟环境
-./scripts/setup_venv.sh
-source .venv/bin/activate
+# 2. 创建 conda 环境（若尚未创建）
+./scripts/setup_conda_env.sh
+conda activate lite_agilex_api
 
-# 3. 获取地图列表（需底盘 NAVIS 服务在线）
+# 3. 获取地图列表（需底盘服务在线）
 python examples/http_get_maps.py
+
+# 4. 构建并启动 ROS2 桥接 / Web 地图 / RViz
+./scripts/build_ros_ws.sh
+./scripts/run_bridge.sh        # 终端 1
+./scripts/run_map_viewer.sh    # 终端 2 → http://localhost:8765
+./scripts/run_rviz.sh          # 终端 3
 ```
 
 ## 配置

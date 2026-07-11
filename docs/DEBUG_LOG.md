@@ -98,6 +98,23 @@ WS    Base : ws://<底盘IP>:9090
 
 ---
 
+## 2026-07-11 — 切换为独立 conda 环境
+
+### 变更
+
+- 新增 `environment.yml`，环境名 **`lite_agilex_api`**
+- `setup_venv.sh` 弃用，改由 `setup_conda_env.sh` 管理
+- `run_bridge.sh` / `run_map_viewer.sh` / `build_ros_ws.sh` 自动 `source scripts/env.sh`
+
+### 操作
+
+```bash
+./scripts/setup_conda_env.sh
+conda activate lite_agilex_api
+```
+
+---
+
 ## 调试记录模板（复制使用）
 
 ```markdown

@@ -1,20 +1,5 @@
 #!/usr/bin/env bash
-# 创建项目 Python 虚拟环境并安装依赖
+# 已弃用：请使用 setup_conda_env.sh
 set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-
-cd "$ROOT_DIR"
-
-if [[ ! -d .venv ]]; then
-  python3 -m venv .venv
-  echo "已创建 .venv"
-fi
-
-# shellcheck disable=SC1091
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-
-echo "虚拟环境就绪: source ${ROOT_DIR}/.venv/bin/activate"
+echo "setup_venv.sh 已弃用，改为使用独立 conda 环境。" >&2
+exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/setup_conda_env.sh"
