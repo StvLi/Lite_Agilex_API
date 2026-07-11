@@ -326,6 +326,7 @@ python examples/ws_subscribe_status.py
 | `ros2: command not found` | 用 `cmd_*.sh` 或 `source scripts/ros2_env.sh` |
 | RViz 无地图 | 确认 `run_bridge.sh` 在运行且 `ROS_DOMAIN_ID=15` |
 | Web 地图启动失败 | 先开终端 A；或 `fuser -k 8765/tcp` 后重启 B |
+| RViz Panel 插件报错 | 已修复：Panels 须用 `rviz_common/*`（Jazzy），见 `chassis_map.rviz` |
 | Web 地图无位姿 | 确认底盘 WS `:6060/real_time_pose` 可达 |
 | `The passed service type is invalid` | 用 `cmd_*.sh`，不要裸跑 `ros2 service` |
 | `navigate_to_pose` 失败 | 确认 `x/y` 为图像像素；桥接需在运行 |
